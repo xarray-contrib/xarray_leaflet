@@ -1,0 +1,11 @@
+name: xarray-leaflet
+channels:
+  - conda-forge
+dependencies:
+  - requests
+  - tqdm
+  - matplotlib
+  - scipy
+  - pip
+  - pip:
+    - git+https://github.com/davidbrochart/xarray_leaflet.git#egg=xarray_leaflet

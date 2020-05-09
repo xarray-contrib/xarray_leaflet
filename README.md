@@ -7,5 +7,5 @@ An xarray extension for tiled map plotting
 ## Installation
 
 ```bash
-pip install git+https://github.com/davidbrochart/xarray_leaflet
+pip install xarray_leaflet
 ```

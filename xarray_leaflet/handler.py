@@ -35,6 +35,7 @@ class XarrayLeafletHandler(JupyterHandler):
             if t > 1:
                 timeout = True
                 break
+        # we can't serve the tile if there was a timeout
         if not timeout:
             with open(path, 'rb') as f:
                 tile = f.read()

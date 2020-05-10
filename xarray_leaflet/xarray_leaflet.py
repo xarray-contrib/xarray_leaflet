@@ -39,18 +39,35 @@ class LeafletMap:
 
         Parameters
         ----------
+        m : ipyleaflet.Map
+            The map on while to show the layer
         lat_dim : str, optional
             Name of the latitude dimension/coordinate
             (default: 'latitude').
         lon_dim : str, optional
             Name of the longitude dimension/coordinate
             (default: 'longitude').
-        **kwargs : key:value
-            Display options for the interactive map.
+        transform0 : function, optional
+            Transformation over the visible DataArray
+        transform1 : function, optional
+            Transformation over the tiles before reprojection
+        transform2 : function, optional
+            Transformation over the tiles before saving to PNG
+        persist : bool, optional
+            Whether to keep the tile files (True) or not (False)
+        dynamic : bool, optional
+            Whether the map is dynamic (True) or not (False). If True then the
+            tiles will refreshed each time the map is dragged or zoomed.
+        tile_dir : str, optional
+            The path to the tile directory (must be absolute)
 
+        Returns
+        -------
+        l : ipyleaflet.LocalTileLayer
+            A handler to the layer that is added to the map
         """
         if dynamic:
-            persist = True#False
+            persist = True
             tile_dir = None
 
         tile_path = tile_dir or mkdtemp(prefix='xarray_leaflet_')

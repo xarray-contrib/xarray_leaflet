@@ -6,4 +6,4 @@ dependencies:
   - tqdm
   - matplotlib
   - scipy
-  - xarray_leaflet
+  - xarray_leaflet=0.1.1

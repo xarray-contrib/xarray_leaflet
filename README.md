@@ -10,6 +10,14 @@ See [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leafle
 
 ## Installation
 
+Using conda:
+
+```bash
+conda install -c conda-forge xarray_leaflet
+```
+
+Using pip:
+
 ```bash
 pip install xarray_leaflet
 ```

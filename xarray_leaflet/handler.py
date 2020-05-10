@@ -1,13 +1,15 @@
 import os
 from asyncio import sleep
-from notebook.base.handlers import IPythonHandler
+from jupyter_server.base.handlers import JupyterHandler
+import tornado
 
-class XarrayLeafletHandler(IPythonHandler):
+class XarrayLeafletHandler(JupyterHandler):
 
     def set_default_headers(self):
         self.set_header('Content-Type', 'image/png')
         self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
 
+    @tornado.web.authenticated
     async def get(self, path):
         path = '/' + path
         tile_done = path[:-4] + '.done'
@@ -41,14 +43,3 @@ class XarrayLeafletHandler(IPythonHandler):
                 os.remove(path)
             self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             self.finish(tile)
-
-
-#from jupyter_server.base.handlers import JupyterHandler
-#import tornado
-#from time import sleep
-#
-#
-#class XarrayLeafletHandler(JupyterHandler):
-#
-#    @tornado.web.authenticated
-#    async def get(self, path):

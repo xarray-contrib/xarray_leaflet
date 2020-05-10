@@ -9,13 +9,12 @@ def get_data_files():
     """
     data_files = [
         ('etc/jupyter/jupyter_server_config.d', ['etc/jupyter/jupyter_server_config.d/xarray_leaflet.json']),
-        ('etc/jupyter/jupyter_notebook_config.d', ['etc/jupyter/jupyter_notebook_config.d/xarray_leaflet.json']),
-        ('etc/jupyter/nbconfig/notebook.d', ['etc/jupyter/nbconfig/notebook.d/xarray_leaflet.json']),
+        ('etc/jupyter/jupyter_notebook_config.d', ['etc/jupyter/jupyter_notebook_config.d/xarray_leaflet.json'])
     ]
     return data_files
 
 requirements = [
-    #'jupyter_server',
+    'jupyter_server',
     'xarray',
     'ipyleaflet',
     'pillow',

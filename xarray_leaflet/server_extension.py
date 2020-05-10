@@ -1,4 +1,3 @@
-#from jupyter_server import serverapp
 from .handler import XarrayLeafletHandler
 from notebook.utils import url_path_join
 
@@ -24,13 +23,13 @@ def _jupyter_nbextension_paths():
         require="xarray_leaflet/extension")]
 
 
-#def _jupyter_server_extension_paths():
-#    """
-#    Returns a list of dictionaries with metadata describing
-#    where to find the `_load_jupyter_server_extension` function.
-#    """
-#    return [
-#        {
-#            "module": "xarray_leaflet"
-#        }
-#    ]
+def _jupyter_server_extension_paths():
+    """
+    Returns a list of dictionaries with metadata describing
+    where to find the `_load_jupyter_server_extension` function.
+    """
+    return [
+        {
+            "module": "xarray_leaflet"
+        }
+    ]

@@ -1,5 +1,0 @@
-{
-    "load_extensions": {
-      "xarray_leaflet/extension": true
-    }
-}

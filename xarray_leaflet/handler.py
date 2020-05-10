@@ -11,7 +11,6 @@ class XarrayLeafletHandler(JupyterHandler):
 
     @tornado.web.authenticated
     async def get(self, path):
-        path = '/' + path
         tile_done = path[:-4] + '.done'
         delete = False
         timeout = False

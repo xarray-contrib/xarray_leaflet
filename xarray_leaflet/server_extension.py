@@ -9,7 +9,7 @@ def _load_jupyter_server_extension(serverapp):
 
     web_app = serverapp.web_app
     host_pattern = '.*$'
-    route_pattern = url_path_join(web_app.settings['base_url'], '/tiles/(.*)')
+    route_pattern = url_path_join(web_app.settings['base_url'], '/xarray_leaflet_tiles/(.*)')
     web_app.add_handlers(host_pattern, [(route_pattern, XarrayLeafletHandler)])
 
 

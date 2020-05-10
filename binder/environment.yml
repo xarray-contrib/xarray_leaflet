@@ -6,4 +6,6 @@ dependencies:
   - tqdm
   - matplotlib
   - scipy
-  - xarray_leaflet=0.1.1
+  - pip
+  - pip:
+    - git+https://github.com/davidbrochart/xarray_leaflet.git#egg=xarray_leaflet

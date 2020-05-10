@@ -70,9 +70,10 @@ class LeafletMap:
             persist = True
             tile_dir = None
 
-        tile_path = tile_dir or mkdtemp(prefix='xarray_leaflet_')
-        assert os.path.isabs(tile_path)
-        url = '/tiles' + tile_path + '/{z}/{x}/{y}.png'
+        tile_root_dir = './xarray_leaflet_tiles'
+        os.makedirs(tile_root_dir, exist_ok=True)
+        tile_path = tile_dir or mkdtemp(dir=tile_root_dir)
+        url = tile_path + '/{z}/{x}/{y}.png'
         l = LocalTileLayer(path=url)
 
         da = self._da.copy()
@@ -104,8 +105,8 @@ class LeafletMap:
         def get_tiles(change):
             nonlocal url, tile_path
             if dynamic:
-                new_tile_path = mkdtemp(prefix='xarray_leaflet_')
-                new_url = '/tiles' + new_tile_path + '/{z}/{x}/{y}.png'
+                new_tile_path = mkdtemp(dir=tile_root_dir)
+                new_url = new_tile_path + '/{z}/{x}/{y}.png'
                 if l in m.layers:
                     m.remove_layer(l)
             ((south, west), (north, east)) = change['new']

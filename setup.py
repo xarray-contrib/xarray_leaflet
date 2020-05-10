@@ -54,7 +54,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/davidbrochart/xarray_leaflet',
-    version='0.1.1',
+    version='0.1.2',
     zip_safe=False,
     data_files=get_data_files()
 )

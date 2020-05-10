@@ -4,7 +4,7 @@
 
 Fortunately xarray is written in Python, and we happen to have a great Python binding for Leaflet, [ipyleaflet](https://ipyleaflet.readthedocs.io).
 
-`xarray-leaflet` uses `ipyleaflet` as a plotting backend for data arrays. It generates map tiles on the fly, possibly using Dask's lazy evaluation system and Zarr's chunked data storage, and serves them through the Jupyter server, allowing for big data visualization.
+xarray-leaflet uses ipyleaflet as a plotting backend for data arrays. It generates map tiles on the fly, possibly using Dask's lazy evaluation system and Zarr's chunked data storage, and serves them through the Jupyter server, allowing for big data visualization.
 
 See [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/introduction.ipynb) for an example notebook.
 
@@ -14,4 +14,6 @@ See [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leafle
 pip install xarray_leaflet
 ```
 
-`xarray-leaflet` currently only works in the classic Jupyter Notebook (not JupyterLab).
+xarray-leaflet currently only works in the classic Jupyter Notebook (not JupyterLab).
+
+By default xarray-leaflet will generate tiles in temporary directories. For dynamic maps it will create a new directory each time you interact with the map, either by dragging or zooming. This is because there is a direct mapping between the tile directory and the URL where tiles are served. Since for dynamic maps, tiles should not be cached by the browser, the URL has to constantly change. These temporary directories are not automatically cleaned up at the moment, so you might want to do it yourself. In Unix-like systems they are under `/tmp/xarray_leaflet_*`.

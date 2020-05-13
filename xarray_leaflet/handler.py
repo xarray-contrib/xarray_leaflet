@@ -11,14 +11,15 @@ class XarrayLeafletHandler(JupyterHandler):
 
     @tornado.web.authenticated
     async def get(self, path):
-        tile_done = path[:-4] + '.done'
+        path = '/' + path
+        path_done = path[:-4] + '.done'
         delete = False
         timeout = False
         dt = 0.1
         t = 0
         while True:
-            if os.path.exists(tile_done):
-                with open(tile_done) as f:
+            if os.path.exists(path_done):
+                with open(path_done) as f:
                     txt = f.read()
                 if txt.startswith('keep'):
                     break
@@ -37,9 +38,9 @@ class XarrayLeafletHandler(JupyterHandler):
         # we can't serve the tile if there was a timeout
         if not timeout:
             with open(path, 'rb') as f:
-                tile = f.read()
+                tile_png = f.read()
             if delete:
-                os.remove(tile_done)
+                os.remove(path_done)
                 os.remove(path)
             self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-            self.finish(tile)
+            self.finish(tile_png)

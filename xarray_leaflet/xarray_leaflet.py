@@ -66,17 +66,25 @@ class LeafletMap:
         l : ipyleaflet.LocalTileLayer
             A handler to the layer that is added to the map
         """
+
+        url = m.window_url
+        if url.endswith('/lab'):
+            # we are in JupyterLab
+            base_url = url[:-4]
+        else:
+            # we are in classical Notebook
+            i = url.rfind('/notebooks/')
+            base_url = url[:i]
+
         if dynamic:
             persist = True
             tile_dir = None
 
-        tile_root_dir = './xarray_leaflet_tiles'
-        os.makedirs(tile_root_dir, exist_ok=True)
-        tile_path = tile_dir or mkdtemp(dir=tile_root_dir)
-        url = tile_path + '/{z}/{x}/{y}.png'
+        tile_path = tile_dir or mkdtemp()
+        url = base_url + '/xarray_leaflet' + tile_path + '/{z}/{x}/{y}.png'
         l = LocalTileLayer(path=url)
 
-        da = self._da.copy()
+        da = self._da
         var_dims = da.dims
 
         if set(var_dims) != set([lat_dim, lon_dim]):
@@ -105,8 +113,8 @@ class LeafletMap:
         def get_tiles(change):
             nonlocal url, tile_path
             if dynamic:
-                new_tile_path = mkdtemp(dir=tile_root_dir)
-                new_url = new_tile_path + '/{z}/{x}/{y}.png'
+                new_tile_path = mkdtemp()
+                new_url = base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
                 if l in m.layers:
                     m.remove_layer(l)
             ((south, west), (north, east)) = change['new']
@@ -120,33 +128,24 @@ class LeafletMap:
             if 0 not in da_visible.shape:
                 da_visible, transform1_args = get_transform(transform0(da_visible))
             if dynamic:
-                for tile in tiles:
-                    path = f'{tile_path}/{int(tile.z)}/{tile.x}/{tile.y}.png'
-                    empty_image(path)
-                    with open(path[:-4] + '.done', 'wt') as f:
-                        f.write('delete')
                 tile_path = new_tile_path
                 url = new_url
             for tile in tiles:
                 path = f'{tile_path}/{int(tile.z)}/{tile.x}/{tile.y}.png'
-                # check if we already have the tile
+                # if static map, check if we already have the tile
+                # if dynamic map, new tiles are always created
                 if dynamic or not os.path.exists(path):
                     bbox = mercantile.bounds(tile)
                     da_tile = da_visible.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
                     # check if we have data for this tile
                     if 0 in da_tile.shape:
-                        empty_image(path)
+                        empty_image(path, persist)
                     else:
                         da_tile = reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy)
                         da_tile, transform2_args = get_transform(transform1(da_tile, *transform1_args))
                         np_tile = get_webmercator(da_tile.values, bbox.west, bbox.north, dx, dy)
                         np_tile, transform3_args = get_transform(transform2(np_tile, *transform2_args))
-                        write_image(np_tile, path)
-                    with open(path[:-4] + '.done', 'wt') as f:
-                        if persist:
-                            f.write('keep')
-                        else:
-                            f.write('delete')
+                        write_image(np_tile, path, persist)
             if dynamic:
                 l.path = url
                 m.add_layer(l)
@@ -187,17 +186,27 @@ def get_webmercator(source, west, north, dx, dy):
     return destination
 
 
-def write_image(data_array, path):
+def write_image(data_array, path, persist):
     im = Image.fromarray(np.uint8(data_array*255))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     im.save(path)
+    write_done_file(path, persist)
 
 
-def empty_image(path):
+def empty_image(path, persist):
     im = Image.new('RGB', (256, 256))
     im.putalpha(256)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     im.save(path)
+    write_done_file(path, persist)
+
+
+def write_done_file(png_path, persist):
+    with open(png_path[:-4] + '.done', 'wt') as f:
+        if persist:
+            f.write('keep')
+        else:
+            f.write('delete')
 
 
 def reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy):

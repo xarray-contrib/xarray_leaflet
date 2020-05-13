@@ -2,7 +2,7 @@
 
 __author__ = """David Brochart"""
 __email__ = 'david.brochart@gmail.com'
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 
 from .xarray_leaflet import LeafletMap
 from .server_extension import _jupyter_server_extension_paths, _load_jupyter_server_extension, _jupyter_nbextension_paths

@@ -67,94 +67,109 @@ class LeafletMap:
             A handler to the layer that is added to the map
         """
 
-        url = m.window_url
-        if url.endswith('/lab'):
-            # we are in JupyterLab
-            base_url = url[:-4]
-        else:
-            # we are in classical Notebook
-            i = url.rfind('/notebooks/')
-            base_url = url[:i]
+        map_started = False
+        l = LocalTileLayer()
 
-        if dynamic:
-            persist = True
-            tile_dir = None
+        def main(change):
+            nonlocal map_started, tile_dir, persist
+            if not map_started and len(m.bounds) > 0:
+                map_started = True
 
-        tile_path = tile_dir or mkdtemp()
-        url = base_url + '/xarray_leaflet' + tile_path + '/{z}/{x}/{y}.png'
-        l = LocalTileLayer(path=url)
-
-        da = self._da
-        var_dims = da.dims
-
-        if set(var_dims) != set([lat_dim, lon_dim]):
-            raise ValueError(
-                "Invalid dimensions in DataArray: "
-                "should include only {}, found {}."
-                .format((lat_dim, lon_dim), var_dims)
-            )
-
-        # ensure latitudes are descending
-        if np.any(np.diff(da[lat_dim].values) >= 0):
-            da = da.sel(**{lat_dim: slice(None, None, -1)})
-
-        # infer grid specifications (assume a rectangular grid)
-        lat = da[lat_dim].values
-        lon = da[lon_dim].values
-
-        lon_left = float(lon.min())
-        lon_right = float(lon.max())
-        lat_lower = float(lat.min())
-        lat_upper = float(lat.max())
-
-        dx = float((lon_right - lon_left) / (lon.size - 1))
-        dy = float((lat_upper - lat_lower) / (lat.size - 1))
-
-        def get_tiles(change):
-            nonlocal url, tile_path
-            if dynamic:
-                new_tile_path = mkdtemp()
-                new_url = base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
-                if l in m.layers:
-                    m.remove_layer(l)
-            ((south, west), (north, east)) = change['new']
-            tiles = list(mercantile.tiles(west, south, east, north, m.zoom))
-            if dynamic:
-                da_visible = da.sel(**{lat_dim: slice(north, south), lon_dim: slice(west, east)})
-            else:
-                bbox = get_bbox_tiles(tiles)
-                da_visible = da.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
-            # check if we have visible data
-            if 0 not in da_visible.shape:
-                da_visible, transform1_args = get_transform(transform0(da_visible))
-            if dynamic:
-                tile_path = new_tile_path
-                url = new_url
-            for tile in tiles:
-                path = f'{tile_path}/{int(tile.z)}/{tile.x}/{tile.y}.png'
-                # if static map, check if we already have the tile
-                # if dynamic map, new tiles are always created
-                if dynamic or not os.path.exists(path):
-                    bbox = mercantile.bounds(tile)
-                    da_tile = da_visible.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
-                    # check if we have data for this tile
-                    if 0 in da_tile.shape:
-                        empty_image(path, persist)
+                url = m.window_url
+                if url.endswith('/lab'):
+                    # we are in JupyterLab
+                    base_url = url[:-4]
+                else:
+                    url_split = url.split('/')
+                    if len(url_split) >= 3 and url_split[-2] == 'notebooks':
+                        # we are in classical Notebook
+                        i = url.rfind('/notebooks/')
+                        base_url = url[:i]
                     else:
-                        da_tile = reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy)
-                        da_tile, transform2_args = get_transform(transform1(da_tile, *transform1_args))
-                        np_tile = get_webmercator(da_tile.values, bbox.west, bbox.north, dx, dy)
-                        np_tile, transform3_args = get_transform(transform2(np_tile, *transform2_args))
-                        write_image(np_tile, path, persist)
-            if dynamic:
-                l.path = url
-                m.add_layer(l)
-                l.redraw()
+                        # we are in Voila
+                        # TODO: make it work when Voila uses Jupyter server's ExtensionApp
+                        base_url = url.rstrip('/')
 
-        get_tiles({'new': m.bounds})
-        m.observe(get_tiles, names='bounds')
-        if not dynamic:
-            m.add_layer(l)
+                if dynamic:
+                    persist = True
+                    tile_dir = None
+
+                tile_path = tile_dir or mkdtemp(prefix='xarray_leaflet_')
+                url = base_url + '/xarray_leaflet' + tile_path + '/{z}/{x}/{y}.png'
+                l.path = url
+
+                da = self._da
+                var_dims = da.dims
+
+                if set(var_dims) != set([lat_dim, lon_dim]):
+                    raise ValueError(
+                        "Invalid dimensions in DataArray: "
+                        "should include only {}, found {}."
+                        .format((lat_dim, lon_dim), var_dims)
+                    )
+
+                # ensure latitudes are descending
+                if np.any(np.diff(da[lat_dim].values) >= 0):
+                    da = da.sel(**{lat_dim: slice(None, None, -1)})
+
+                # infer grid specifications (assume a rectangular grid)
+                lat = da[lat_dim].values
+                lon = da[lon_dim].values
+
+                lon_left = float(lon.min())
+                lon_right = float(lon.max())
+                lat_lower = float(lat.min())
+                lat_upper = float(lat.max())
+
+                dx = float((lon_right - lon_left) / (lon.size - 1))
+                dy = float((lat_upper - lat_lower) / (lat.size - 1))
+
+                def get_tiles(change):
+                    nonlocal url, tile_path
+                    if dynamic:
+                        new_tile_path = mkdtemp(prefix='xarray_leaflet_')
+                        new_url = base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
+                        if l in m.layers:
+                            m.remove_layer(l)
+                    ((south, west), (north, east)) = change['new']
+                    tiles = list(mercantile.tiles(west, south, east, north, m.zoom))
+                    if dynamic:
+                        da_visible = da.sel(**{lat_dim: slice(north, south), lon_dim: slice(west, east)})
+                    else:
+                        bbox = get_bbox_tiles(tiles)
+                        da_visible = da.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
+                    # check if we have visible data
+                    if 0 not in da_visible.shape:
+                        da_visible, transform1_args = get_transform(transform0(da_visible))
+                    if dynamic:
+                        tile_path = new_tile_path
+                        url = new_url
+                    for tile in tiles:
+                        path = f'{tile_path}/{int(tile.z)}/{tile.x}/{tile.y}.png'
+                        # if static map, check if we already have the tile
+                        # if dynamic map, new tiles are always created
+                        if dynamic or not os.path.exists(path):
+                            bbox = mercantile.bounds(tile)
+                            da_tile = da_visible.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
+                            # check if we have data for this tile
+                            if 0 not in da_tile.shape:
+                                da_tile = reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy)
+                                da_tile, transform2_args = get_transform(transform1(da_tile, *transform1_args))
+                                np_tile = get_webmercator(da_tile.values, bbox.west, bbox.north, dx, dy)
+                                np_tile, transform3_args = get_transform(transform2(np_tile, *transform2_args))
+                                write_image(np_tile, path, persist)
+                    if dynamic:
+                        l.path = url
+                        m.add_layer(l)
+                        l.redraw()
+
+                get_tiles({'new': m.bounds})
+                m.observe(get_tiles, names='bounds')
+                if not dynamic:
+                    m.add_layer(l)
+
+        main(None)
+        m.observe(main, names='bounds')
         return l
 
 
@@ -188,14 +203,6 @@ def get_webmercator(source, west, north, dx, dy):
 
 def write_image(data_array, path, persist):
     im = Image.fromarray(np.uint8(data_array*255))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    im.save(path)
-    write_done_file(path, persist)
-
-
-def empty_image(path, persist):
-    im = Image.new('RGB', (256, 256))
-    im.putalpha(256)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     im.save(path)
     write_done_file(path, persist)

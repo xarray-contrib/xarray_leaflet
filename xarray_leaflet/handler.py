@@ -28,13 +28,18 @@ class XarrayLeafletHandler(JupyterHandler):
                     break
             await sleep(dt)
             t += dt
-            # don't wait more than one second
+            # don't wait more than 10 seconds
             # Leaflet can make a request while dragging but Python is not
             # triggered unless the mouse button is released, so the file
             # will never be written
-            if t > 1:
+            # also, we don't write a file if there is no data in our bbox
+            if t > 10:
                 timeout = True
                 break
+            if t > 1:
+                # we started polling every 0.1s, but after 1s we only poll
+                # every second as we are not very reactive anyway!
+                dt = 1
         # we can't serve the tile if there was a timeout
         if not timeout:
             with open(path, 'rb') as f:

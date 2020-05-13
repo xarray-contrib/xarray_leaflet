@@ -80,8 +80,7 @@ class LeafletMap:
                     # we are in JupyterLab
                     base_url = url[:-4]
                 else:
-                    url_split = url.split('/')
-                    if len(url_split) >= 3 and url_split[-2] == 'notebooks':
+                    if '/notebooks/' in url:
                         # we are in classical Notebook
                         i = url.rfind('/notebooks/')
                         base_url = url[:i]

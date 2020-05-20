@@ -3,18 +3,14 @@ import os
 from tempfile import mkdtemp
 
 import xarray as xr
-import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-from PIL import Image
+from matplotlib import pyplot as plt
 import numpy as np
-from affine import Affine
 import mercantile
 from ipyleaflet import LocalTileLayer
 from traitlets import observe
 
-
-def no_transform(array, *args):
-    return array
+from .transform import passthrough, normalize, coarsen
+from .utils import get_webmercator, write_image, reindex, get_bbox_tiles, get_transform
 
 
 @xr.register_dataarray_accessor('leaflet')
@@ -25,27 +21,29 @@ class LeafletMap:
     def __init__(self, da):
         self._da = da
 
-    def plot(self, m, lat_dim='latitude', lon_dim='longitude',
-             transform0=no_transform,
-             transform1=no_transform,
-             transform2=no_transform,
+    def plot(self, m, y_dim='latitude', x_dim='longitude',
+             transform0=normalize,
+             transform1=passthrough,
+             transform2=coarsen(),
+             transform3=passthrough,
+             colormap=plt.cm.inferno,
              persist=True,
              dynamic=False,
              tile_dir=None):
-        """Display a lat/lon array as an interactive map.
+        """Display an array as an interactive map.
 
         Assumes that the pixels are given on a regular grid
-        (fixed spacing in latitude and longitude).
+        (fixed spacing in x and y).
 
         Parameters
         ----------
         m : ipyleaflet.Map
             The map on while to show the layer
-        lat_dim : str, optional
-            Name of the latitude dimension/coordinate
+        y_dim : str, optional
+            Name of the y dimension/coordinate
             (default: 'latitude').
-        lon_dim : str, optional
-            Name of the longitude dimension/coordinate
+        x_dim : str, optional
+            Name of the x dimension/coordinate
             (default: 'longitude').
         transform0 : function, optional
             Transformation over the visible DataArray
@@ -67,11 +65,40 @@ class LeafletMap:
             A handler to the layer that is added to the map
         """
 
+        da = self._da
+        var_dims = da.dims
+        if set(var_dims) != set([y_dim, x_dim]):
+            raise ValueError(
+                "Invalid dimensions in DataArray: "
+                "should include only {}, found {}."
+                .format((y_dim, x_dim), var_dims)
+            )
+
+        da = da.rename({y_dim: 'y', x_dim: 'x'})
+
+        # ensure latitudes are descending
+        if np.any(np.diff(da.y.values) >= 0):
+            da = da.sel(y=slice(None, None, -1))
+
+        da, transform0_args = get_transform(transform0(da))
+
+        # infer grid specifications (assume a rectangular grid)
+        y = da.y.values
+        x = da.x.values
+
+        x_left = float(x.min())
+        x_right = float(x.max())
+        y_lower = float(y.min())
+        y_upper = float(y.max())
+
+        dx = float((x_right - x_left) / (x.size - 1))
+        dy = float((y_upper - y_lower) / (y.size - 1))
+
         map_started = False
         l = LocalTileLayer()
 
         def main(change):
-            nonlocal map_started, tile_dir, persist
+            nonlocal da, map_started, tile_dir, persist
             if not map_started and len(m.bounds) > 0:
                 map_started = True
 
@@ -97,32 +124,6 @@ class LeafletMap:
                 url = base_url + '/xarray_leaflet' + tile_path + '/{z}/{x}/{y}.png'
                 l.path = url
 
-                da = self._da
-                var_dims = da.dims
-
-                if set(var_dims) != set([lat_dim, lon_dim]):
-                    raise ValueError(
-                        "Invalid dimensions in DataArray: "
-                        "should include only {}, found {}."
-                        .format((lat_dim, lon_dim), var_dims)
-                    )
-
-                # ensure latitudes are descending
-                if np.any(np.diff(da[lat_dim].values) >= 0):
-                    da = da.sel(**{lat_dim: slice(None, None, -1)})
-
-                # infer grid specifications (assume a rectangular grid)
-                lat = da[lat_dim].values
-                lon = da[lon_dim].values
-
-                lon_left = float(lon.min())
-                lon_right = float(lon.max())
-                lat_lower = float(lat.min())
-                lat_upper = float(lat.max())
-
-                dx = float((lon_right - lon_left) / (lon.size - 1))
-                dy = float((lat_upper - lat_lower) / (lat.size - 1))
-
                 def get_tiles(change):
                     nonlocal url, tile_path
                     if dynamic:
@@ -133,13 +134,13 @@ class LeafletMap:
                     ((south, west), (north, east)) = change['new']
                     tiles = list(mercantile.tiles(west, south, east, north, m.zoom))
                     if dynamic:
-                        da_visible = da.sel(**{lat_dim: slice(north, south), lon_dim: slice(west, east)})
+                        da_visible = da.sel(y=slice(north, south), x=slice(west, east))
                     else:
                         bbox = get_bbox_tiles(tiles)
-                        da_visible = da.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
+                        da_visible = da.sel(y=slice(bbox.north, bbox.south), x=slice(bbox.west, bbox.east))
                     # check if we have visible data
                     if 0 not in da_visible.shape:
-                        da_visible, transform1_args = get_transform(transform0(da_visible))
+                        da_visible, transform1_args = get_transform(transform1(da_visible, *transform0_args))
                     if dynamic:
                         tile_path = new_tile_path
                         url = new_url
@@ -149,13 +150,14 @@ class LeafletMap:
                         # if dynamic map, new tiles are always created
                         if dynamic or not os.path.exists(path):
                             bbox = mercantile.bounds(tile)
-                            da_tile = da_visible.sel(**{lat_dim: slice(bbox.north, bbox.south), lon_dim: slice(bbox.west, bbox.east)})
+                            da_tile = da_visible.sel(y=slice(bbox.north, bbox.south), x=slice(bbox.west, bbox.east))
                             # check if we have data for this tile
                             if 0 not in da_tile.shape:
-                                da_tile = reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy)
-                                da_tile, transform2_args = get_transform(transform1(da_tile, *transform1_args))
+                                da_tile = reindex(da_tile, bbox, dx, dy)
+                                da_tile, transform2_args = get_transform(transform2(da_tile, *transform1_args))
                                 np_tile = get_webmercator(da_tile.values, bbox.west, bbox.north, dx, dy)
-                                np_tile, transform3_args = get_transform(transform2(np_tile, *transform2_args))
+                                np_tile, transform3_args = get_transform(transform3(np_tile, *transform2_args))
+                                np_tile = colormap(np_tile)
                                 write_image(np_tile, path, persist)
                     if dynamic:
                         l.path = url
@@ -170,99 +172,3 @@ class LeafletMap:
         main(None)
         m.observe(main, names='bounds')
         return l
-
-
-def get_webmercator(source, west, north, dx, dy):
-    with rasterio.Env():
-        rows, cols = source.shape
-        east = west + dx * cols
-        south = north - dy * rows
-        src_transform = Affine(dx, 0, west, 0, -dy, north)
-        src_crs = {'init': 'EPSG:4326'}
-
-        dst_crs = {'init': 'EPSG:3857'}
-        width = height = 256
-        dst_transform, new_width, new_height = calculate_default_transform(src_crs, dst_crs, cols, rows, bottom=south, left=east, top=north, right=west, dst_width=width, dst_height=height)
-        assert width == new_width
-        assert height == new_height
-
-        destination = np.zeros((height, width))
-
-        reproject(
-            source,
-            destination,
-            src_transform=src_transform,
-            src_crs=src_crs,
-            dst_transform=dst_transform,
-            dst_crs=dst_crs,
-            resampling=Resampling.nearest)
-
-    return destination
-
-
-def write_image(data_array, path, persist):
-    im = Image.fromarray(np.uint8(data_array*255))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    im.save(path)
-    write_done_file(path, persist)
-
-
-def write_done_file(png_path, persist):
-    with open(png_path[:-4] + '.done', 'wt') as f:
-        if persist:
-            f.write('keep')
-        else:
-            f.write('delete')
-
-
-def reindex(da_tile, lon_dim, lat_dim, bbox, dx, dy):
-    do_reindex = False
-    lons = da_tile[lon_dim].values
-    # check if we have data on the left
-    if lons[0] - dx < bbox.west:
-        # check if we have data on the right
-        if not (lons[-1] + dx > bbox.east):
-            # we need to pad on the right
-            do_reindex = True
-            lons = np.arange(lons[0], bbox.east, dx)
-    else:
-        # we need to pad on the left
-        do_reindex = True
-        lons = np.arange(lons[-1], bbox.west, -dx)[::-1]
-    lats = da_tile[lat_dim].values
-    # check if we have data at the top
-    if lats[0] + dy > bbox.north:
-        # check if we have data at the bottom
-        if not (lats[-1] - dy < bbox.south):
-            # we need to pad at the bottom
-            do_reindex = True
-            lats = np.arange(lats[0], bbox.south, -dy)
-    else:
-        # we need to pad at the top
-        do_reindex = True
-        lats = np.arange(lats[-1], bbox.north, dy)[::-1]
-    if do_reindex:
-        da_tile = da_tile.reindex(**{lat_dim: lats, lon_dim: lons}, method='nearest', tolerance=dx/4)
-    return da_tile
-
-
-def get_bbox_tiles(tiles):
-    north = east = -float('inf')
-    south = west = float('inf')
-    for tile in tiles:
-        bbox = mercantile.bounds(tile)
-        north = max(north, bbox.north)
-        south = min(south, bbox.south)
-        west = min(west, bbox.west)
-        east = max(east, bbox.east)
-    bbox_tiles = mercantile.LngLatBbox(west, south, east, north)
-    return bbox_tiles
-
-
-def get_transform(result):
-    if type(result) == tuple:
-        array, *args = result
-    else:
-        array = result
-        args = []
-    return array, args

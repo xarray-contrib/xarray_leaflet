@@ -16,8 +16,9 @@ def get_data_files():
 requirements = [
     'jupyter_server',
     'xarray',
-    'ipyleaflet @ git+https://github.com/jupyter-widgets/ipyleaflet.git#egg=ipyleaflet',
+    'ipyleaflet',
     'pillow',
+    'matplotlib',
     'rasterio',
     'affine',
     'mercantile'
@@ -54,7 +55,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/davidbrochart/xarray_leaflet',
-    version='0.1.3',
+    version='0.1.4',
     zip_safe=False,
     data_files=get_data_files()
 )

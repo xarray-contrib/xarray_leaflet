@@ -8,7 +8,13 @@ Fortunately xarray is written in Python, and we happen to have a great Python bi
 
 xarray-leaflet uses ipyleaflet as a plotting backend for data arrays. It generates map tiles on the fly, possibly using Dask's lazy evaluation system and Zarr's chunked data storage, and serves them through the Jupyter server, allowing for big data visualization.
 
-See [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/introduction.ipynb) for an example notebook.
+See the example notebooks:
+- [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/introduction.ipynb) to get started.
+- [examples/dynamic.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/dynamic.ipynb) for more advances visualizations, and in particular dynamic maps.
+
+## How does it compare to other visualization libraries?
+
+xarray-leaflet doesn't try to reinvent the wheel. It stands on the shoulders of giants: xarray, Dask, Jupyter widgets, Leaflet. By combining this software stack, it opens up new possibilities while being a relatively small library.
 
 ## Installation
 

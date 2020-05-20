@@ -18,7 +18,7 @@ requirements = [
     'xarray',
     'ipyleaflet @ git+https://github.com/jupyter-widgets/ipyleaflet.git#egg=ipyleaflet',
     'pillow',
-    'matplotlib',
+    'matplotlib-base',
     'rasterio',
     'affine',
     'mercantile'

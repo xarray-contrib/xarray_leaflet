@@ -10,7 +10,7 @@ xarray-leaflet uses ipyleaflet as a plotting backend for data arrays. It generat
 
 See the example notebooks:
 - [examples/introduction.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/introduction.ipynb) to get started.
-- [examples/dynamic.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/dynamic.ipynb) for more advances visualizations, and in particular dynamic maps.
+- [examples/dynamic.ipynb](https://github.com/davidbrochart/xarray_leaflet/blob/master/examples/dynamic.ipynb) for more advanced visualizations, and in particular dynamic maps.
 
 ## How does it compare to other visualization libraries?
 

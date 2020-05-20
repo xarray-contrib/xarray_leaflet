@@ -1,4 +1,4 @@
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/davidbrochart/xarray_leaflet/master?filepath=examples%2Fintroduction.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/davidbrochart/xarray_leaflet/master?filepath=examples%2Fdynamic.ipynb)
 
 # xarray-leaflet: an xarray extension for tiled map plotting
 

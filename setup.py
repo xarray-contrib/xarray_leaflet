@@ -16,7 +16,7 @@ def get_data_files():
 requirements = [
     'jupyter_server',
     'xarray',
-    'ipyleaflet',
+    'ipyleaflet @ git+https://github.com/jupyter-widgets/ipyleaflet.git#egg=ipyleaflet',
     'pillow',
     'matplotlib',
     'rasterio',

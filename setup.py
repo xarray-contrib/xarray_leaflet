@@ -18,7 +18,7 @@ requirements = [
     'xarray',
     'ipyleaflet>=0.13.0',
     'pillow',
-    'matplotlib-base',
+    'matplotlib',
     'rasterio',
     'affine',
     'mercantile'

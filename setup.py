@@ -15,11 +15,10 @@ def get_data_files():
 
 requirements = [
     'jupyter_server',
-    'xarray',
+    'rioxarray',
     'ipyleaflet>=0.13.0',
     'pillow',
     'matplotlib',
-    'rasterio',
     'affine',
     'mercantile'
 ]

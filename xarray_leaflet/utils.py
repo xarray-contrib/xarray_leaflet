@@ -1,37 +1,24 @@
 import os
 import numpy as np
-import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
 from PIL import Image
 import mercantile
 from affine import Affine
 
 
-def get_webmercator(source, west, north, dx, dy):
-    with rasterio.Env():
-        rows, cols = source.shape
-        east = west + dx * cols
-        south = north - dy * rows
-        src_transform = Affine(dx, 0, west, 0, -dy, north)
-        src_crs = {'init': 'EPSG:4326'}
+def reproject_custom(source, dst_crs, x0, y0, z, resolution, width, height):
+    a = resolution
+    b = 0
+    c = (x0 - 2 ** z) * width * resolution
+    d = 0
+    e = -resolution
+    f = (2 ** z - y0) * height * resolution
+    dst_affine = Affine(a, b, c, d, e, f)
+    destination = source.rio.reproject(dst_crs, dst_affine_width_height=(dst_affine, width, height))
+    return destination
 
-        dst_crs = {'init': 'EPSG:3857'}
-        width = height = 256
-        dst_transform, new_width, new_height = calculate_default_transform(src_crs, dst_crs, cols, rows, bottom=south, left=east, top=north, right=west, dst_width=width, dst_height=height)
-        assert width == new_width
-        assert height == new_height
 
-        destination = np.zeros((height, width))
-
-        reproject(
-            source,
-            destination,
-            src_transform=src_transform,
-            src_crs=src_crs,
-            dst_transform=dst_transform,
-            dst_crs=dst_crs,
-            resampling=Resampling.nearest)
-
+def reproject_not_custom(source, dst_crs, width, height):
+    destination = source.rio.reproject(dst_crs, shape=(height, width))
     return destination
 
 

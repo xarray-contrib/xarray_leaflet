@@ -14,13 +14,13 @@ def get_data_files():
     return data_files
 
 requirements = [
-    'jupyter_server',
-    'rioxarray',
+    'jupyter_server>=0.3.0',
+    'rioxarray>=0.0.28',
     'ipyleaflet>=0.13.0',
-    'pillow',
-    'matplotlib',
-    'affine',
-    'mercantile'
+    'pillow>=7',
+    'matplotlib>=3',
+    'affine>=2',
+    'mercantile>=1'
 ]
 
 setup_requirements = [ ]

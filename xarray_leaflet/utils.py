@@ -13,7 +13,7 @@ def reproject_custom(source, dst_crs, x0, y0, z, resolution, width, height):
     e = -resolution
     f = (2 ** z - y0) * height * resolution
     dst_affine = Affine(a, b, c, d, e, f)
-    destination = source.rio.reproject(dst_crs, dst_affine_width_height=(dst_affine, width, height))
+    destination = source.rio.reproject(dst_crs, transform=dst_affine, shape=(height, width))
     return destination
 
 

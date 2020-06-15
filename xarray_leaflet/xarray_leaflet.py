@@ -102,6 +102,10 @@ class LeafletMap:
         self.transform2 = transform2
         self.transform3 = transform3
         self.colormap = colormap
+        if self.dynamic:
+            self.persist = True
+            self.tile_dir = None
+
 
         var_dims = self.da.dims
         if set(var_dims) != set([y_dim, x_dim]):
@@ -157,10 +161,6 @@ class LeafletMap:
                     # TODO: make it work when Voila uses Jupyter server's ExtensionApp
                     self.base_url = self.url.rstrip('/')
 
-            if self.dynamic:
-                self.persist = True
-                self.tile_dir = None
-
             self.tile_path = self.tile_dir or mkdtemp(prefix='xarray_leaflet_')
             self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
             self.l.path = self.url
@@ -208,8 +208,8 @@ class LeafletMap:
             da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args))
 
         if self.dynamic:
-            tile_path = new_tile_path
-            url = new_url
+            self.tile_path = new_tile_path
+            self.url = new_url
 
         for tile in tiles:
             x, y, z = tile

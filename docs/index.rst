@@ -22,6 +22,7 @@ map view.
    :caption: Contents:
 
    installation
+   getting_started
    usage
    modules
    contributing

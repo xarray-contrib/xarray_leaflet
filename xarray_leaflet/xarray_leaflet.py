@@ -8,9 +8,10 @@ import numpy as np
 import mercantile
 from ipyleaflet import LocalTileLayer
 from traitlets import observe
+from rasterio.warp import Resampling
 
 from .transform import passthrough, normalize, coarsen
-from .utils import reproject_custom, reproject_not_custom, write_image, reindex, get_bbox_tiles, get_transform
+from .utils import reproject_custom, reproject_not_custom, write_image, get_bbox_tiles, get_transform
 
 
 @xr.register_dataarray_accessor('leaflet')
@@ -31,7 +32,8 @@ class LeafletMap:
              dynamic=False,
              tile_dir=None,
              tile_height=256,
-             tile_width=256):
+             tile_width=256,
+             resampling=Resampling.nearest):
         """Display an array as an interactive map.
 
         Assumes that the pixels are given on a regular grid
@@ -40,7 +42,7 @@ class LeafletMap:
         Parameters
         ----------
         m : ipyleaflet.Map
-            The map on while to show the layer
+            The map on while to show the layer.
         y_dim : str, optional
             Name of the y dimension/coordinate
             (default: 'y').
@@ -48,29 +50,35 @@ class LeafletMap:
             Name of the x dimension/coordinate
             (default: 'x').
         transform0 : function, optional
-            Transformation over the whole DataArray
+            Transformation over the whole DataArray.
         transform1 : function, optional
-            Transformation over the visible DataArray
+            Transformation over the visible DataArray.
         transform2 : function, optional
-            Transformation over the tiles before reprojection
+            Transformation over the tiles before reprojection.
         transform3 : function, optional
-            Transformation over the tiles before saving to PNG
+            Transformation over the tiles before saving to PNG.
+        colormap : function, optional
+            The colormap function to use for the tile PNG
+            (default: matplotlib.pyplot.cm.inferno).
         persist : bool, optional
-            Whether to keep the tile files (True) or not (False)
+            Whether to keep the tile files (True) or not (False).
         dynamic : bool, optional
             Whether the map is dynamic (True) or not (False). If True then the
             tiles will refreshed each time the map is dragged or zoomed.
         tile_dir : str, optional
-            The path to the tile directory (must be absolute)
+            The path to the tile directory (must be absolute).
         tile_height : int, optional
-            The heiht of a tile in pixels (default: 256)
+            The heiht of a tile in pixels (default: 256).
         tile_width : int, optional
-            The width of a tile in pixels (default: 256)
+            The width of a tile in pixels (default: 256).
+        resampling : int, optional
+            The resampling method to use, see rasterio.warp.reproject
+            (default: Resampling.nearest).
 
         Returns
         -------
         l : ipyleaflet.LocalTileLayer
-            A handler to the layer that is added to the map
+            A handler to the layer that is added to the map.
         """
 
         if 'proj4def' in m.crs:
@@ -84,15 +92,17 @@ class LeafletMap:
             epsg = m.crs['name'][4:]
             if dynamic and epsg != '3857':
                 raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
-            self.dst_crs = {'init': 'EPSG:' + epsg}
+            self.dst_crs = 'EPSG:' + epsg
             self.web_mercator = epsg == '3857'
             self.custom_proj = False
         else:
             raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
 
+        self.resampling = resampling
         self.tile_dir = tile_dir
         self.persist = persist
         self.da = self._da
+        self.attrs = self._da.attrs
         self.m = m
         self.dynamic = dynamic
         self.tile_width = tile_width
@@ -184,19 +194,23 @@ class LeafletMap:
         if self.custom_proj:
             resolution = self.m.crs['resolutions'][z]
 
-        x0, x1 = left // self.tile_width, right // self.tile_width + 1
-        y0, y1 = top // self.tile_height, bottom // self.tile_height + 1
-        tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
+        if self.web_mercator:
+            tiles = list(mercantile.tiles(west, south, east, north, z))
+        else:
+            x0, x1 = left // self.tile_width, right // self.tile_width + 1
+            y0, y1 = top // self.tile_height, bottom // self.tile_height + 1
+            tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
 
         if self.dynamic:
             # dynamic maps are redrawn at each interaction with the map
-            # so we can take excatly the corresponding slice in the original data
+            # so we can take exactly the corresponding slice in the original data
             da_visible = self.da.sel(y=slice(north, south), x=slice(west, east))
         elif self.web_mercator:
-            # for static web mercator maps we can't redraw a tile once it has been displayed,
+            # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
             # so we must slice the original data on tile boundaries
             bbox = get_bbox_tiles(tiles)
-            da_visible = self.da.sel(y=slice(bbox.north, bbox.south), x=slice(bbox.west, bbox.east))
+            # take one more source data point to avoid glitches
+            da_visible = self.da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
         else:
             # it's a custom projection or not web mercator, the visible tiles don't translate easily
             # to a slice of the original data, so we keep everything
@@ -219,21 +233,26 @@ class LeafletMap:
             if self.dynamic or not os.path.exists(path):
                 if self.web_mercator:
                     bbox = mercantile.bounds(tile)
-                    da_tile = da_visible.sel(y=slice(bbox.north, bbox.south), x=slice(bbox.west, bbox.east))
+                    xy_bbox = mercantile.xy_bounds(tile)
+                    x_pix = (xy_bbox.right - xy_bbox.left) / self.tile_width
+                    y_pix = (xy_bbox.top - xy_bbox.bottom) / self.tile_height
+                    # take one more source data point to avoid glitches
+                    da_tile = da_visible.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
                 else:
                     da_tile = da_visible
                 # check if we have data for this tile
-                if 0 not in da_tile.shape:
-                    if self.web_mercator:
-                        da_tile = reindex(da_tile, bbox, self.dx, self.dy)
-                    da_tile, transform2_args = get_transform(self.transform2(da_tile), *transform1_args)
+                if 0 in da_tile.shape:
+                    write_image(path, None, self.persist)
+                else:
+                    da_tile.attrs = self.attrs
+                    da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height), *transform1_args)
                     if self.custom_proj:
-                        da_tile = reproject_custom(da_tile, self.dst_crs, x, y, z, resolution, self.tile_width, self.tile_height)
+                        da_tile = reproject_custom(da_tile, self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
                     else:
-                        da_tile = reproject_not_custom(da_tile, self.dst_crs, self.tile_width, self.tile_height)
+                        da_tile = reproject_not_custom(da_tile, self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
                     da_tile, transform3_args = get_transform(self.transform3(da_tile, *transform2_args))
                     da_tile = self.colormap(da_tile)
-                    write_image(da_tile, path, self.persist)
+                    write_image(path, da_tile, self.persist)
 
         if self.dynamic:
             self.l.path = self.url

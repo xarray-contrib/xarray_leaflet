@@ -8,19 +8,17 @@ Installation
 Stable release
 --------------
 
-To install xarray-leaflet, run this command in your terminal:
+You can install xarray-leaflet with pip:
 
 .. code-block:: console
 
     $ pip install xarray_leaflet
 
-This is the preferred method to install xarray-leaflet, as it will always install the most recent stable release.
+Or with conda (or mamba):
 
-If you don't have `pip`_ installed, this `Python installation guide`_ can guide
-you through the process.
+.. code-block:: console
 
-.. _pip: https://pip.pypa.io
-.. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
+    $ conda install xarray_leaflet
 
 
 From sources
@@ -44,7 +42,7 @@ Once you have a copy of the source, you can install it with:
 
 .. code-block:: console
 
-    $ python setup.py install
+    $ pip install .
 
 
 .. _Github repo: https://github.com/davidbrochart/xarray_leaflet

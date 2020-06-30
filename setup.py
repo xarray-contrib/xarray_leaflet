@@ -15,8 +15,8 @@ def get_data_files():
 
 requirements = [
     'jupyter_server>=0.3.0',
-    'rioxarray>=0.0.28',
-    'ipyleaflet>=0.13.0',
+    'rioxarray>=0.0.30',
+    'ipyleaflet>=0.13.1',
     'pillow>=7',
     'matplotlib>=3',
     'affine>=2',
@@ -54,7 +54,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/davidbrochart/xarray_leaflet',
-    version='0.1.6',
+    version='0.1.7',
     zip_safe=False,
     data_files=get_data_files()
 )

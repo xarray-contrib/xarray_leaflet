@@ -197,8 +197,8 @@ class LeafletMap:
         if self.web_mercator:
             tiles = list(mercantile.tiles(west, south, east, north, z))
         else:
-            x0, x1 = left // self.tile_width, right // self.tile_width + 1
-            y0, y1 = top // self.tile_height, bottom // self.tile_height + 1
+            x0, x1 = int(left) // self.tile_width, int(right) // self.tile_width + 1
+            y0, y1 = int(top) // self.tile_height, int(bottom) // self.tile_height + 1
             tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
 
         if self.dynamic:

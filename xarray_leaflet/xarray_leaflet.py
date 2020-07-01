@@ -22,12 +22,16 @@ class LeafletMap:
     def __init__(self, da):
         self._da = da
 
-    def plot(self, m, x_dim='x', y_dim='y',
-             transform0=normalize,
+    def plot(self,
+             m,
+             x_dim='x',
+             y_dim='y',
+             rgb_dim=None,
+             transform0=None,
              transform1=passthrough,
              transform2=coarsen(),
              transform3=passthrough,
-             colormap=plt.cm.inferno,
+             colormap=None,
              persist=True,
              dynamic=False,
              tile_dir=None,
@@ -49,6 +53,9 @@ class LeafletMap:
         x_dim : str, optional
             Name of the x dimension/coordinate
             (default: 'x').
+        rgb_dim : str, optional
+            Name of the RGB dimension/coordinate
+            (default: None).
         transform0 : function, optional
             Transformation over the whole DataArray.
         transform1 : function, optional
@@ -98,6 +105,32 @@ class LeafletMap:
         else:
             raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
 
+        var_dims = self._da.dims
+        expected_dims = [y_dim, x_dim]
+        if rgb_dim is not None:
+            expected_dims.append(rgb_dim)
+        if set(var_dims) != set(expected_dims):
+            raise ValueError(
+                "Invalid dimensions in DataArray: "
+                "should include only {}, found {}."
+                .format(tuple(expected_dims), rgb_, var_dims)
+            )
+
+        if rgb_dim is not None and colormap is not None:
+            raise ValueError(
+                "Cannot have a RGB dimension and a "
+                "colormap at the same time."
+            )
+        elif rgb_dim is None:
+            if colormap is None:
+                colormap = plt.cm.inferno
+            if transform0 is None:
+                transform0 = normalize
+        else:
+            # there is a RGB dimension
+            if transform0 is None:
+                transform0 = passthrough
+
         self.resampling = resampling
         self.tile_dir = tile_dir
         self.persist = persist
@@ -116,16 +149,12 @@ class LeafletMap:
             self.persist = True
             self.tile_dir = None
 
-
-        var_dims = self.da.dims
-        if set(var_dims) != set([y_dim, x_dim]):
-            raise ValueError(
-                "Invalid dimensions in DataArray: "
-                "should include only {}, found {}."
-                .format((y_dim, x_dim), var_dims)
-            )
-
         self.da = self.da.rename({y_dim: 'y', x_dim: 'x'})
+        if rgb_dim is None:
+            self.is_rgb = False
+        else:
+            self.is_rgb = True
+            self.da = self.da.rename({rgb_dim: 'rgb'})
 
         # ensure latitudes are descending
         if np.any(np.diff(self.da.y.values) >= 0):
@@ -246,12 +275,22 @@ class LeafletMap:
                 else:
                     da_tile.attrs = self.attrs
                     da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height), *transform1_args)
-                    if self.custom_proj:
-                        da_tile = reproject_custom(da_tile, self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
+                    # reproject each RGB component if needed
+                    # TODO: must be doable with xarray.apply_ufunc
+                    if self.is_rgb:
+                        das = [da_tile.isel(rgb=i) for i in range(3)]
                     else:
-                        da_tile = reproject_not_custom(da_tile, self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
-                    da_tile, transform3_args = get_transform(self.transform3(da_tile, *transform2_args))
-                    da_tile = self.colormap(da_tile)
+                        das = [da_tile]
+                    for i in range(len(das)):
+                        if self.custom_proj:
+                            das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
+                        else:
+                            das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
+                        das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args))
+                    if self.is_rgb:
+                        da_tile = np.stack(das, axis=2)
+                    else:
+                        da_tile = self.colormap(das[0])
                     write_image(path, da_tile, self.persist)
 
         if self.dynamic:

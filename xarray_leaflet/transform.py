@@ -18,7 +18,12 @@ def coarsen(agg_func=xr.core.rolling.DataArrayCoarsen.mean):
     def _(array, *args, **kwargs):
         tile_width = kwargs['tile_width']
         tile_height = kwargs['tile_height']
-        ny, nx = array.shape
+        if len(array.shape) > 2:
+            # it's an RGB array
+            array_2d = array.isel(rgb=0)
+        else:
+            array_2d = array
+        ny, nx = array_2d.shape
         wx = nx // (tile_width * 2)
         wy = ny // (tile_height * 2)
         dim = {}

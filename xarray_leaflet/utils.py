@@ -34,7 +34,7 @@ def write_image(path, data, persist):
     if data is None:
         open(path, 'wb').close()
     else:
-        im = Image.fromarray(np.uint8(data*255))
+        im = Image.fromarray(np.uint8(data))
         im.save(path)
     write_done_file(path, persist)
 

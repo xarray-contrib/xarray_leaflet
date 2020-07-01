@@ -113,7 +113,7 @@ class LeafletMap:
             raise ValueError(
                 "Invalid dimensions in DataArray: "
                 "should include only {}, found {}."
-                .format(tuple(expected_dims), rgb_, var_dims)
+                .format(tuple(expected_dims), var_dims)
             )
 
         if rgb_dim is not None and colormap is not None:
@@ -288,10 +288,13 @@ class LeafletMap:
                             das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
                         das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args))
                     if self.is_rgb:
+                        alpha = np.where(das[0]==self.da.rio.nodata, 0, 255)
+                        das.append(alpha)
                         da_tile = np.stack(das, axis=2)
+                        write_image(path, da_tile, self.persist)
                     else:
                         da_tile = self.colormap(das[0])
-                    write_image(path, da_tile, self.persist)
+                        write_image(path, da_tile*255, self.persist)
 
         if self.dynamic:
             self.l.path = self.url

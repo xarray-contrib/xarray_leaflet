@@ -14,7 +14,7 @@ def get_data_files():
     return data_files
 
 requirements = [
-    'jupyter_server>=0.3.0',
+    'jupyter_server>=0.2.0',
     'rioxarray>=0.0.30',
     'ipyleaflet>=0.13.1',
     'pillow>=7',

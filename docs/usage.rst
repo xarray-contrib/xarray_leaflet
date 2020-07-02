@@ -14,17 +14,17 @@ Projections
 ===========
 
 xarray-leaflet currently accepts DataArrays that are in the ``EPSG:4326``
-projection (aka ``WGS84``).  This means that the ``x`` and ``y`` coordinates
-are expressed in degrees (longitudes and latitudes).  Furthermore, they must be
-on a regular grid, e.g. there is always 0.1 between two coordinates (although
-it could be different for ``x`` and ``y``).  xarray-leaflet's primary Leaflet
+projection (aka ``WGS84``).  This means that the ``x`` and ``y`` coordinates are
+expressed in degrees (longitudes and latitudes).  Furthermore, they must be on a
+regular grid, e.g. there is always 0.1° between two coordinates (although it
+could be different for ``x`` and ``y``).  xarray-leaflet's primary Leaflet
 projection is Web Mercator, or ``EPSG:3857``. This is Leaflet's default
-projection, and most base maps that you can find on the Internet support this
-projection.  This means that xarray-leaflet will be much more efficient when
-using this projection, basically because it can slice easily.  However, it can
-also use a custom Leaflet projection, e.g. ``EPSG:3413`` which is centered on
-the north pole. But to do so it will have to work on the whole DataArray, which
-might not fit in memory if it is too big.
+projection, and most base maps that you can find on the Internet use it. This
+means that xarray-leaflet will be much more efficient when using this
+projection, basically because it can easily slice the DataArray for a tile.
+However, it can also use a custom Leaflet projection, e.g. ``EPSG:3413`` which
+is centered on the north pole. But to do so it will have to work on the whole
+DataArray, which might not fit in memory if it is too big.
 
 Static or dynamic mode
 ======================
@@ -33,7 +33,7 @@ xarray-leaflet has two modes, one is for static maps and the other for dynamic
 maps.  By dynamic we mean that you won't see the same thing depending on the
 current map view.  For instance, when you zoom in you might want to show
 details that would otherwise be hidden.  So the map really adapts to where you
-look on the Earth The downside of dynamic maps is that you will see more
+look on the Earth. The downside of dynamic maps is that you will see more
 flickering as you interact with the map, because tiles have to be refreshed as
 soon as you drag or zoom.
 

@@ -1,6 +1,6 @@
 """Main module."""
 import os
-from tempfile import mkdtemp
+from tempfile import TemporaryDirectory
 
 import xarray as xr
 from matplotlib import pyplot as plt
@@ -147,7 +147,7 @@ class LeafletMap:
         self.transform3 = transform3
         self.colormap = colormap
         if self.dynamic:
-            self.persist = True
+            self.persist = False
             self.tile_dir = None
 
         self.da = self.da.rename({y_dim: 'y', x_dim: 'x'})
@@ -175,7 +175,8 @@ class LeafletMap:
 
         self.map_started = False
         self.l = LocalTileLayer()
-        self.l.name = self.da.name
+        if self.da.name is not None:
+            self.l.name = self.da.name
 
         self.spinner = Spinner()
         self.spinner.radius = 5
@@ -213,7 +214,11 @@ class LeafletMap:
                     # TODO: make it work when Voila uses Jupyter server's ExtensionApp
                     self.base_url = self.url.rstrip('/')
 
-            self.tile_path = self.tile_dir or mkdtemp(prefix='xarray_leaflet_')
+            if self.tile_dir is None:
+                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+                self.tile_path = self.tile_temp_dir.name
+            else:
+                self.tile_path = self.tile_dir
             self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
             self.l.path = self.url
 
@@ -227,7 +232,9 @@ class LeafletMap:
     def get_tiles(self, change=None):
         self.m.add_control(self.spinner_control)
         if self.dynamic:
-            new_tile_path = mkdtemp(prefix='xarray_leaflet_')
+            self.tile_temp_dir.cleanup()
+            self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+            new_tile_path = self.tile_temp_dir.name
             new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
             if self.l in self.m.layers:
                 self.m.remove_layer(self.l)

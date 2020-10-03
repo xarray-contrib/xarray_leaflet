@@ -174,6 +174,7 @@ class LeafletMap:
 
         self.map_started = False
         self.l = LocalTileLayer()
+        self.l.name = self.da.name
 
         self.main()
         self.m.observe(self.main, names='pixel_bounds')

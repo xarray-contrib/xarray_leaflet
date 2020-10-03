@@ -20,7 +20,8 @@ requirements = [
     'pillow>=7',
     'matplotlib>=3',
     'affine>=2',
-    'mercantile>=1'
+    'mercantile>=1',
+    'ipyspin>=0.1.1'
 ]
 
 setup_requirements = [ ]

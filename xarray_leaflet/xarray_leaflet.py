@@ -6,7 +6,8 @@ import xarray as xr
 from matplotlib import pyplot as plt
 import numpy as np
 import mercantile
-from ipyleaflet import LocalTileLayer
+from ipyleaflet import LocalTileLayer, WidgetControl
+from ipyspin import Spinner
 from traitlets import observe
 from rasterio.warp import Resampling
 
@@ -176,6 +177,16 @@ class LeafletMap:
         self.l = LocalTileLayer()
         self.l.name = self.da.name
 
+        self.spinner = Spinner()
+        self.spinner.radius = 5
+        self.spinner.length = 3
+        self.spinner.width = 5
+        self.spinner.lines = 8
+        self.spinner.color = '#000000'
+        self.spinner.layout.height = '30px'
+        self.spinner.layout.width = '30px'
+        self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
+
         self.main()
         self.m.observe(self.main, names='pixel_bounds')
         return self.l
@@ -185,6 +196,7 @@ class LeafletMap:
         if not self.map_started and len(self.m.pixel_bounds) > 0:
             self.map_started = True
 
+            self.m.add_control(self.spinner_control)
             self.da, self.transform0_args = get_transform(self.transform0(self.da))
 
             self.url = self.m.window_url
@@ -205,6 +217,7 @@ class LeafletMap:
             self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
             self.l.path = self.url
 
+            self.m.remove_control(self.spinner_control)
             self.get_tiles()
             self.m.observe(self.get_tiles, names='pixel_bounds')
             if not self.dynamic:
@@ -212,6 +225,7 @@ class LeafletMap:
 
 
     def get_tiles(self, change=None):
+        self.m.add_control(self.spinner_control)
         if self.dynamic:
             new_tile_path = mkdtemp(prefix='xarray_leaflet_')
             new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
@@ -301,3 +315,5 @@ class LeafletMap:
             self.l.path = self.url
             self.m.add_layer(self.l)
             self.l.redraw()
+
+        self.m.remove_control(self.spinner_control)

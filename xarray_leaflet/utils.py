@@ -1,4 +1,5 @@
 import os
+import asyncio
 import numpy as np
 from PIL import Image
 import mercantile
@@ -67,3 +68,12 @@ def get_transform(result):
         array = result
         args = []
     return array, args
+
+
+def wait_for_change(widget, value):
+    future = asyncio.Future()
+    def get_value(change):
+        future.set_result(change.new)
+        widget.unobserve(get_value, value)
+    widget.observe(get_value, value)
+    return future

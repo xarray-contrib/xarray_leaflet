@@ -6,7 +6,7 @@ import xarray as xr
 from matplotlib import pyplot as plt
 import numpy as np
 import mercantile
-from ipyleaflet import LocalTileLayer, WidgetControl
+from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
 from traitlets import observe
 from rasterio.warp import Resampling
@@ -22,6 +22,7 @@ class LeafletMap:
     """
     def __init__(self, da):
         self._da = da
+        self._da_selected = None
 
     def plot(self,
              m,
@@ -135,7 +136,6 @@ class LeafletMap:
         self.resampling = resampling
         self.tile_dir = tile_dir
         self.persist = persist
-        self.da = self._da
         self.attrs = self._da.attrs
         self.m = m
         self.dynamic = dynamic
@@ -150,20 +150,20 @@ class LeafletMap:
             self.persist = False
             self.tile_dir = None
 
-        self.da = self.da.rename({y_dim: 'y', x_dim: 'x'})
+        self._da = self._da.rename({y_dim: 'y', x_dim: 'x'})
         if rgb_dim is None:
             self.is_rgb = False
         else:
             self.is_rgb = True
-            self.da = self.da.rename({rgb_dim: 'rgb'})
+            self._da = self._da.rename({rgb_dim: 'rgb'})
 
         # ensure latitudes are descending
-        if np.any(np.diff(self.da.y.values) >= 0):
-            self.da = self.da.sel(y=slice(None, None, -1))
+        if np.any(np.diff(self._da.y.values) >= 0):
+            self._da = self._da.sel(y=slice(None, None, -1))
 
         # infer grid specifications (assume a rectangular grid)
-        y = self.da.y.values
-        x = self.da.x.values
+        y = self._da.y.values
+        x = self._da.x.values
 
         x_left = float(x.min())
         x_right = float(x.max())
@@ -175,8 +175,10 @@ class LeafletMap:
 
         self.map_started = False
         self.l = LocalTileLayer()
-        if self.da.name is not None:
-            self.l.name = self.da.name
+        if self._da.name is not None:
+            self.l.name = self._da.name
+
+        self._da_notransform = self._da
 
         self.spinner = Spinner()
         self.spinner.radius = 5
@@ -188,17 +190,52 @@ class LeafletMap:
         self.spinner.layout.width = '30px'
         self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
 
-        self.main()
-        self.m.observe(self.main, names='pixel_bounds')
+        self._main()
+        self.m.observe(self._main, names='pixel_bounds')
         return self.l
 
 
-    def main(self, change=None):
+    def select(self, draw_control=None):
+        if draw_control is None:
+            self._draw_control = DrawControl()
+            self._draw_control.polygon = {}
+            self._draw_control.polyline = {}
+            self._draw_control.circlemarker = {}
+            self._draw_control.rectangle = {
+                'shapeOptions': {
+                    'fillOpacity': 0.5
+                }
+            }
+        else:
+            self._draw_control = draw_control
+        self._draw_control.on_draw(self._get_selection)
+        self.m.add_control(self._draw_control)
+
+
+    def unselect(self):
+        self.m.remove_control(self._draw_control)
+
+
+    def get_selection(self):
+        return self._da_selected
+
+
+    def _get_selection(self, *args, **kwargs):
+        if self._draw_control.last_draw['geometry'] is not None:
+            lonlat = self._draw_control.last_draw['geometry']['coordinates'][0]
+            lats = [ll[1] for ll in lonlat]
+            lons = [ll[0] for ll in lonlat]
+            lt0, lt1 = min(lats), max(lats)
+            ln0, ln1 = min(lons), max(lons)
+            self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
+
+
+    def _main(self, change=None):
         if not self.map_started and len(self.m.pixel_bounds) > 0:
             self.map_started = True
 
             self.m.add_control(self.spinner_control)
-            self.da, self.transform0_args = get_transform(self.transform0(self.da))
+            self._da, self.transform0_args = get_transform(self.transform0(self._da))
 
             self.url = self.m.window_url
             if self.url.endswith('/lab'):
@@ -223,13 +260,13 @@ class LeafletMap:
             self.l.path = self.url
 
             self.m.remove_control(self.spinner_control)
-            self.get_tiles()
-            self.m.observe(self.get_tiles, names='pixel_bounds')
+            self._get_tiles()
+            self.m.observe(self._get_tiles, names='pixel_bounds')
             if not self.dynamic:
                 self.m.add_layer(self.l)
 
 
-    def get_tiles(self, change=None):
+    def _get_tiles(self, change=None):
         self.m.add_control(self.spinner_control)
         if self.dynamic:
             self.tile_temp_dir.cleanup()
@@ -255,18 +292,18 @@ class LeafletMap:
         if self.dynamic:
             # dynamic maps are redrawn at each interaction with the map
             # so we can take exactly the corresponding slice in the original data
-            da_visible = self.da.sel(y=slice(north, south), x=slice(west, east))
+            da_visible = self._da.sel(y=slice(north, south), x=slice(west, east))
         elif self.web_mercator:
             # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
             # so we must slice the original data on tile boundaries
             bbox = get_bbox_tiles(tiles)
             # take one more source data point to avoid glitches
-            da_visible = self.da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
+            da_visible = self._da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
         else:
             # it's a custom projection or not web mercator, the visible tiles don't translate easily
             # to a slice of the original data, so we keep everything
             # TODO: slice the data for EPSG3395, EPSG4326, Earth, Base and Simple
-            da_visible = self.da
+            da_visible = self._da
 
         # check if we have some data to show
         if 0 not in da_visible.shape:
@@ -310,7 +347,7 @@ class LeafletMap:
                             das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
                         das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args))
                     if self.is_rgb:
-                        alpha = np.where(das[0]==self.da.rio.nodata, 0, 255)
+                        alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
                         das.append(alpha)
                         da_tile = np.stack(das, axis=2)
                         write_image(path, da_tile, self.persist)

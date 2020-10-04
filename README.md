@@ -14,7 +14,7 @@ See the example notebooks:
 
 ## How does it compare to other visualization libraries?
 
-xarray-leaflet doesn't try to reinvent the wheel. It stands on the shoulders of giants: xarray, Dask, Jupyter widgets, Leaflet. By combining this software stack, it opens up new possibilities while being a relatively small library.
+xarray-leaflet doesn't try to reinvent the wheel. It stands on the shoulders of giants: xarray, Jupyter widgets, Leaflet. By combining this software stack, it opens up new possibilities while being a relatively small library.
 
 ## Installation
 
@@ -29,5 +29,3 @@ Using pip:
 ```bash
 pip install xarray_leaflet
 ```
-
-By default xarray-leaflet will generate tiles in temporary directories. For dynamic maps it will create a new directory each time you interact with the map, either by dragging or zooming. This is because there is a direct mapping between the tile directory and the URL where tiles are served. Since for dynamic maps, tiles should not be cached by the browser, the URL has to constantly change. These temporary directories are not automatically cleaned up at the moment, so you might want to do it yourself. In Unix-like systems they are under `/tmp/xarray_leaflet_*`.

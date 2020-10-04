@@ -1,5 +1,5 @@
-"""Main module."""
 import os
+import asyncio
 from tempfile import TemporaryDirectory
 
 import xarray as xr
@@ -8,18 +8,25 @@ import numpy as np
 import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
-from traitlets import observe
+from traitlets import HasTraits, Bool, observe
 from rasterio.warp import Resampling
 
 from .transform import passthrough, normalize, coarsen
-from .utils import reproject_custom, reproject_not_custom, write_image, get_bbox_tiles, get_transform
+from .utils import reproject_custom, reproject_not_custom, write_image, get_bbox_tiles, get_transform, wait_for_change
 
 
 @xr.register_dataarray_accessor('leaflet')
-class LeafletMap:
+class LeafletMap(HasTraits):
     """A xarray.DataArray extension for tiled map plotting, based on (ipy)leaflet.
-
     """
+
+    map_ready = Bool(False)
+
+    @observe('map_ready')
+    def _map_ready_changed(self, change):
+        self._start()
+
+
     def __init__(self, da):
         self._da = da
         self._da_selected = None
@@ -28,6 +35,7 @@ class LeafletMap:
              m,
              x_dim='x',
              y_dim='y',
+             fit_bounds=True,
              rgb_dim=None,
              transform0=None,
              transform1=passthrough,
@@ -39,7 +47,8 @@ class LeafletMap:
              tile_dir=None,
              tile_height=256,
              tile_width=256,
-             resampling=Resampling.nearest):
+             resampling=Resampling.nearest,
+             debug_output=None):
         """Display an array as an interactive map.
 
         Assumes that the pixels are given on a regular grid
@@ -89,6 +98,8 @@ class LeafletMap:
         l : ipyleaflet.LocalTileLayer
             A handler to the layer that is added to the map.
         """
+
+        self.debug_output = debug_output
 
         if 'proj4def' in m.crs:
             # it's a custom projection
@@ -165,15 +176,19 @@ class LeafletMap:
         y = self._da.y.values
         x = self._da.x.values
 
-        x_left = float(x.min())
-        x_right = float(x.max())
-        y_lower = float(y.min())
-        y_upper = float(y.max())
+        self.x_left = float(x.min())
+        self.x_right = float(x.max())
+        self.y_lower = float(y.min())
+        self.y_upper = float(y.max())
 
-        self.dx = float((x_right - x_left) / (x.size - 1))
-        self.dy = float((y_upper - y_lower) / (y.size - 1))
+        self.dx = float((self.x_right - self.x_left) / (x.size - 1))
+        self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
 
-        self.map_started = False
+        if fit_bounds:
+            asyncio.ensure_future(self.async_fit_bounds())
+        else:
+            asyncio.ensure_future(self.async_wait_for_bounds())
+
         self.l = LocalTileLayer()
         if self._da.name is not None:
             self.l.name = self._da.name
@@ -190,8 +205,6 @@ class LeafletMap:
         self.spinner.layout.width = '30px'
         self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
 
-        self._main()
-        self.m.observe(self._main, names='pixel_bounds')
         return self.l
 
 
@@ -230,40 +243,37 @@ class LeafletMap:
             self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
 
 
-    def _main(self, change=None):
-        if not self.map_started and len(self.m.pixel_bounds) > 0:
-            self.map_started = True
+    def _start(self):
+        self.m.add_control(self.spinner_control)
+        self._da, self.transform0_args = get_transform(self.transform0(self._da))
 
-            self.m.add_control(self.spinner_control)
-            self._da, self.transform0_args = get_transform(self.transform0(self._da))
-
-            self.url = self.m.window_url
-            if self.url.endswith('/lab'):
-                # we are in JupyterLab
-                self.base_url = self.url[:-4]
+        self.url = self.m.window_url
+        if self.url.endswith('/lab'):
+            # we are in JupyterLab
+            self.base_url = self.url[:-4]
+        else:
+            if '/notebooks/' in self.url:
+                # we are in classical Notebook
+                i = self.url.rfind('/notebooks/')
+                self.base_url = self.url[:i]
             else:
-                if '/notebooks/' in self.url:
-                    # we are in classical Notebook
-                    i = self.url.rfind('/notebooks/')
-                    self.base_url = self.url[:i]
-                else:
-                    # we are in Voila
-                    # TODO: make it work when Voila uses Jupyter server's ExtensionApp
-                    self.base_url = self.url.rstrip('/')
+                # we are in Voila
+                # TODO: make it work when Voila uses Jupyter server's ExtensionApp
+                self.base_url = self.url.rstrip('/')
 
-            if self.tile_dir is None:
-                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
-                self.tile_path = self.tile_temp_dir.name
-            else:
-                self.tile_path = self.tile_dir
-            self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
-            self.l.path = self.url
+        if self.tile_dir is None:
+            self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+            self.tile_path = self.tile_temp_dir.name
+        else:
+            self.tile_path = self.tile_dir
+        self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
+        self.l.path = self.url
 
-            self.m.remove_control(self.spinner_control)
-            self._get_tiles()
-            self.m.observe(self._get_tiles, names='pixel_bounds')
-            if not self.dynamic:
-                self.m.add_layer(self.l)
+        self.m.remove_control(self.spinner_control)
+        self._get_tiles()
+        self.m.observe(self._get_tiles, names='pixel_bounds')
+        if not self.dynamic:
+            self.m.add_layer(self.l)
 
 
     def _get_tiles(self, change=None):
@@ -361,3 +371,46 @@ class LeafletMap:
             self.l.redraw()
 
         self.m.remove_control(self.spinner_control)
+
+
+    async def async_wait_for_bounds(self):
+        if len(self.m.bounds) == 0:
+            await wait_for_change(self.m, 'bounds')
+        self.map_ready = True
+
+
+    async def async_fit_bounds(self):
+        center = self.y_lower + (self.y_upper - self.y_lower) / 2, self.x_left + (self.x_right - self.x_left) / 2
+        if center != self.m.center:
+            self.m.center = center
+            await wait_for_change(self.m, 'bounds')
+        zoomed_out = False
+        # zoom out
+        while True:
+            if self.m.zoom <= 1:
+                break
+            if self.debug_output is not None:
+                with self.debug_output:
+                    print('Zooming out')
+            (south, west), (north, east) = self.m.bounds
+            if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
+                self.m.zoom = self.m.zoom - 1
+                await wait_for_change(self.m, 'bounds')
+                zoomed_out = True
+            else:
+                break
+        if not zoomed_out:
+            # zoom in
+            while True:
+                if self.debug_output is not None:
+                    with self.debug_output:
+                        print('Zooming in')
+                (south, west), (north, east) = self.m.bounds
+                if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
+                    self.m.zoom = self.m.zoom + 1
+                    await wait_for_change(self.m, 'bounds')
+                else:
+                    self.m.zoom = self.m.zoom - 1
+                    await wait_for_change(self.m, 'bounds')
+                    break
+        self.map_ready = True

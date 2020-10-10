@@ -72,9 +72,9 @@ class LeafletMap(HasTraits):
         transform1 : function, optional
             Transformation over the visible DataArray.
         transform2 : function, optional
-            Transformation over the tiles before reprojection.
+            Transformation over a tile before reprojection.
         transform3 : function, optional
-            Transformation over the tiles before saving to PNG.
+            Transformation over a tile before saving to PNG.
         colormap : function, optional
             The colormap function to use for the tile PNG
             (default: matplotlib.pyplot.cm.inferno).
@@ -245,7 +245,7 @@ class LeafletMap(HasTraits):
 
     def _start(self):
         self.m.add_control(self.spinner_control)
-        self._da, self.transform0_args = get_transform(self.transform0(self._da))
+        self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
 
         self.url = self.m.window_url
         if self.url.endswith('/lab'):
@@ -256,10 +256,10 @@ class LeafletMap(HasTraits):
                 # we are in classical Notebook
                 i = self.url.rfind('/notebooks/')
                 self.base_url = self.url[:i]
-            else:
+            elif '/voila/' in self.url:
                 # we are in Voila
-                # TODO: make it work when Voila uses Jupyter server's ExtensionApp
-                self.base_url = self.url.rstrip('/')
+                i = self.url.rfind('/voila/')
+                self.base_url = self.url[:i]
 
         if self.tile_dir is None:
             self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
@@ -317,7 +317,7 @@ class LeafletMap(HasTraits):
 
         # check if we have some data to show
         if 0 not in da_visible.shape:
-            da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args))
+            da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args, debug_output=self.debug_output))
 
         if self.dynamic:
             self.tile_path = new_tile_path
@@ -343,7 +343,7 @@ class LeafletMap(HasTraits):
                     write_image(path, None, self.persist)
                 else:
                     da_tile.attrs = self.attrs
-                    da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height), *transform1_args)
+                    da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height, debug_output=self.debug_output), *transform1_args)
                     # reproject each RGB component if needed
                     # TODO: must be doable with xarray.apply_ufunc
                     if self.is_rgb:
@@ -355,7 +355,7 @@ class LeafletMap(HasTraits):
                             das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
                         else:
                             das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
-                        das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args))
+                        das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args, debug_output=self.debug_output))
                     if self.is_rgb:
                         alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
                         das.append(alpha)

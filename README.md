@@ -29,3 +29,11 @@ Using pip:
 ```bash
 pip install xarray_leaflet
 ```
+
+## Using xarray-leaflet with Voila
+
+To work with xarray-leaflet, Voila has to be launched with the following command:
+
+```bash
+jupyter server --ServerApp.open_browser=True --ServerApp.default_url="voila/render/path_to_notebook.ipynb"
+```

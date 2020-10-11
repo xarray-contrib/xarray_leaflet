@@ -5,4 +5,5 @@ dependencies:
   - requests
   - tqdm
   - scipy
+  - dask
   - xarray_leaflet

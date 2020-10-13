@@ -118,6 +118,7 @@ class LeafletMap(HasTraits):
         else:
             raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
 
+        self.nodata = self._da.rio.nodata
         var_dims = self._da.dims
         expected_dims = [y_dim, x_dim]
         if rgb_dim is not None:
@@ -277,100 +278,102 @@ class LeafletMap(HasTraits):
 
 
     def _get_tiles(self, change=None):
-        self.m.add_control(self.spinner_control)
-        if self.dynamic:
-            self.tile_temp_dir.cleanup()
-            self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
-            new_tile_path = self.tile_temp_dir.name
-            new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
-            if self.l in self.m.layers:
-                self.m.remove_layer(self.l)
+        with self.debug_output:
+            self.m.add_control(self.spinner_control)
+            if self.dynamic:
+                self.tile_temp_dir.cleanup()
+                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+                new_tile_path = self.tile_temp_dir.name
+                new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
+                if self.l in self.m.layers:
+                    self.m.remove_layer(self.l)
 
-        (left, top), (right, bottom) = self.m.pixel_bounds
-        (south, west), (north, east) = self.m.bounds
-        z = int(self.m.zoom)  # TODO: support non-integer zoom levels?
-        if self.custom_proj:
-            resolution = self.m.crs['resolutions'][z]
+            (left, top), (right, bottom) = self.m.pixel_bounds
+            (south, west), (north, east) = self.m.bounds
+            z = int(self.m.zoom)  # TODO: support non-integer zoom levels?
+            if self.custom_proj:
+                resolution = self.m.crs['resolutions'][z]
 
-        if self.web_mercator:
-            tiles = list(mercantile.tiles(west, south, east, north, z))
-        else:
-            x0, x1 = int(left) // self.tile_width, int(right) // self.tile_width + 1
-            y0, y1 = int(top) // self.tile_height, int(bottom) // self.tile_height + 1
-            tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
+            if self.web_mercator:
+                tiles = list(mercantile.tiles(west, south, east, north, z))
+            else:
+                x0, x1 = int(left) // self.tile_width, int(right) // self.tile_width + 1
+                y0, y1 = int(top) // self.tile_height, int(bottom) // self.tile_height + 1
+                tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
 
-        if self.dynamic:
-            # dynamic maps are redrawn at each interaction with the map
-            # so we can take exactly the corresponding slice in the original data
-            da_visible = self._da.sel(y=slice(north, south), x=slice(west, east))
-        elif self.web_mercator:
-            # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
-            # so we must slice the original data on tile boundaries
-            bbox = get_bbox_tiles(tiles)
-            # take one more source data point to avoid glitches
-            da_visible = self._da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
-        else:
-            # it's a custom projection or not web mercator, the visible tiles don't translate easily
-            # to a slice of the original data, so we keep everything
-            # TODO: slice the data for EPSG3395, EPSG4326, Earth, Base and Simple
-            da_visible = self._da
+            if self.dynamic:
+                # dynamic maps are redrawn at each interaction with the map
+                # so we can take exactly the corresponding slice in the original data
+                da_visible = self._da.sel(y=slice(north, south), x=slice(west, east))
+            elif self.web_mercator:
+                # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
+                # so we must slice the original data on tile boundaries
+                bbox = get_bbox_tiles(tiles)
+                # take one more source data point to avoid glitches
+                da_visible = self._da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
+            else:
+                # it's a custom projection or not web mercator, the visible tiles don't translate easily
+                # to a slice of the original data, so we keep everything
+                # TODO: slice the data for EPSG3395, EPSG4326, Earth, Base and Simple
+                da_visible = self._da
 
-        # check if we have some data to show
-        if 0 not in da_visible.shape:
-            da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args, debug_output=self.debug_output))
+            # check if we have some data to show
+            if 0 not in da_visible.shape:
+                da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args, debug_output=self.debug_output))
 
-        if self.dynamic:
-            self.tile_path = new_tile_path
-            self.url = new_url
+            if self.dynamic:
+                self.tile_path = new_tile_path
+                self.url = new_url
 
-        for tile in tiles:
-            x, y, z = tile
-            path = f'{self.tile_path}/{z}/{x}/{y}.png'
-            # if static map, check if we already have the tile
-            # if dynamic map, new tiles are always created
-            if self.dynamic or not os.path.exists(path):
-                if self.web_mercator:
-                    bbox = mercantile.bounds(tile)
-                    xy_bbox = mercantile.xy_bounds(tile)
-                    x_pix = (xy_bbox.right - xy_bbox.left) / self.tile_width
-                    y_pix = (xy_bbox.top - xy_bbox.bottom) / self.tile_height
-                    # take one more source data point to avoid glitches
-                    da_tile = da_visible.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
-                else:
-                    da_tile = da_visible
-                # check if we have data for this tile
-                if 0 in da_tile.shape:
-                    write_image(path, None, self.persist)
-                else:
-                    da_tile.attrs = self.attrs
-                    da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height, debug_output=self.debug_output), *transform1_args)
-                    # reproject each RGB component if needed
-                    # TODO: must be doable with xarray.apply_ufunc
-                    if self.is_rgb:
-                        das = [da_tile.isel(rgb=i) for i in range(3)]
+            for tile in tiles:
+                x, y, z = tile
+                path = f'{self.tile_path}/{z}/{x}/{y}.png'
+                # if static map, check if we already have the tile
+                # if dynamic map, new tiles are always created
+                if self.dynamic or not os.path.exists(path):
+                    if self.web_mercator:
+                        bbox = mercantile.bounds(tile)
+                        xy_bbox = mercantile.xy_bounds(tile)
+                        x_pix = (xy_bbox.right - xy_bbox.left) / self.tile_width
+                        y_pix = (xy_bbox.top - xy_bbox.bottom) / self.tile_height
+                        # take one more source data point to avoid glitches
+                        da_tile = da_visible.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
                     else:
-                        das = [da_tile]
-                    for i in range(len(das)):
-                        if self.custom_proj:
-                            das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
+                        da_tile = da_visible
+                    # check if we have data for this tile
+                    if 0 in da_tile.shape:
+                        write_image(path, None, self.persist)
+                    else:
+                        da_tile.attrs = self.attrs
+                        da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height, debug_output=self.debug_output), *transform1_args)
+                        # reproject each RGB component if needed
+                        # TODO: must be doable with xarray.apply_ufunc
+                        if self.is_rgb:
+                            das = [da_tile.isel(rgb=i) for i in range(3)]
                         else:
-                            das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
-                        das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args, debug_output=self.debug_output))
-                    if self.is_rgb:
-                        alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
-                        das.append(alpha)
-                        da_tile = np.stack(das, axis=2)
-                        write_image(path, da_tile, self.persist)
-                    else:
-                        da_tile = self.colormap(das[0])
-                        write_image(path, da_tile*255, self.persist)
+                            das = [da_tile]
+                        for i in range(len(das)):
+                            das[i] = das[i].rio.write_nodata(self.nodata)
+                            if self.custom_proj:
+                                das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
+                            else:
+                                das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
+                            das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args, debug_output=self.debug_output))
+                        if self.is_rgb:
+                            alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
+                            das.append(alpha)
+                            da_tile = np.stack(das, axis=2)
+                            write_image(path, da_tile, self.persist)
+                        else:
+                            da_tile = self.colormap(das[0])
+                            write_image(path, da_tile*255, self.persist)
 
-        if self.dynamic:
-            self.l.path = self.url
-            self.m.add_layer(self.l)
-            self.l.redraw()
+            if self.dynamic:
+                self.l.path = self.url
+                self.m.add_layer(self.l)
+                self.l.redraw()
 
-        self.m.remove_control(self.spinner_control)
+            self.m.remove_control(self.spinner_control)
 
 
     async def async_wait_for_bounds(self):

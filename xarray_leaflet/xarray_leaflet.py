@@ -8,6 +8,7 @@ import numpy as np
 import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
+from ipywidgets import Output
 from traitlets import HasTraits, Bool, observe
 from rasterio.warp import Resampling
 
@@ -99,135 +100,141 @@ class LeafletMap(HasTraits):
             A handler to the layer that is added to the map.
         """
 
-        self.debug_output = debug_output
-
-        if 'proj4def' in m.crs:
-            # it's a custom projection
-            if dynamic:
-                raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
-            self.dst_crs = m.crs['proj4def']
-            self.web_mercator = False
-            self.custom_proj = True
-        elif m.crs['name'].startswith('EPSG'):
-            epsg = m.crs['name'][4:]
-            if dynamic and epsg != '3857':
-                raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
-            self.dst_crs = 'EPSG:' + epsg
-            self.web_mercator = epsg == '3857'
-            self.custom_proj = False
+        if debug_output is None:
+            self.debug_output = Output()
         else:
-            raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
+            self.debug_output = debug_output
 
-        self.nodata = self._da.rio.nodata
-        var_dims = self._da.dims
-        expected_dims = [y_dim, x_dim]
-        if rgb_dim is not None:
-            expected_dims.append(rgb_dim)
-        if set(var_dims) != set(expected_dims):
-            raise ValueError(
-                "Invalid dimensions in DataArray: "
-                "should include only {}, found {}."
-                .format(tuple(expected_dims), var_dims)
-            )
+        with self.debug_output:
+            if 'proj4def' in m.crs:
+                # it's a custom projection
+                if dynamic:
+                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+                self.dst_crs = m.crs['proj4def']
+                self.web_mercator = False
+                self.custom_proj = True
+            elif m.crs['name'].startswith('EPSG'):
+                epsg = m.crs['name'][4:]
+                if dynamic and epsg != '3857':
+                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+                self.dst_crs = 'EPSG:' + epsg
+                self.web_mercator = epsg == '3857'
+                self.custom_proj = False
+            else:
+                raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
 
-        if rgb_dim is not None and colormap is not None:
-            raise ValueError(
-                "Cannot have a RGB dimension and a "
-                "colormap at the same time."
-            )
-        elif rgb_dim is None:
-            if colormap is None:
-                colormap = plt.cm.inferno
-            if transform0 is None:
-                transform0 = normalize
-        else:
-            # there is a RGB dimension
-            if transform0 is None:
-                transform0 = passthrough
+            self.nodata = self._da.rio.nodata
+            var_dims = self._da.dims
+            expected_dims = [y_dim, x_dim]
+            if rgb_dim is not None:
+                expected_dims.append(rgb_dim)
+            if set(var_dims) != set(expected_dims):
+                raise ValueError(
+                    "Invalid dimensions in DataArray: "
+                    "should include only {}, found {}."
+                    .format(tuple(expected_dims), var_dims)
+                )
 
-        self.resampling = resampling
-        self.tile_dir = tile_dir
-        self.persist = persist
-        self.attrs = self._da.attrs
-        self.m = m
-        self.dynamic = dynamic
-        self.tile_width = tile_width
-        self.tile_height = tile_height
-        self.transform0 = transform0
-        self.transform1 = transform1
-        self.transform2 = transform2
-        self.transform3 = transform3
-        self.colormap = colormap
-        if self.dynamic:
-            self.persist = False
-            self.tile_dir = None
+            if rgb_dim is not None and colormap is not None:
+                raise ValueError(
+                    "Cannot have a RGB dimension and a "
+                    "colormap at the same time."
+                )
+            elif rgb_dim is None:
+                if colormap is None:
+                    colormap = plt.cm.inferno
+                if transform0 is None:
+                    transform0 = normalize
+            else:
+                # there is a RGB dimension
+                if transform0 is None:
+                    transform0 = passthrough
 
-        self._da = self._da.rename({y_dim: 'y', x_dim: 'x'})
-        if rgb_dim is None:
-            self.is_rgb = False
-        else:
-            self.is_rgb = True
-            self._da = self._da.rename({rgb_dim: 'rgb'})
+            self.resampling = resampling
+            self.tile_dir = tile_dir
+            self.persist = persist
+            self.attrs = self._da.attrs
+            self.m = m
+            self.dynamic = dynamic
+            self.tile_width = tile_width
+            self.tile_height = tile_height
+            self.transform0 = transform0
+            self.transform1 = transform1
+            self.transform2 = transform2
+            self.transform3 = transform3
+            self.colormap = colormap
+            if self.dynamic:
+                self.persist = False
+                self.tile_dir = None
 
-        # ensure latitudes are descending
-        if np.any(np.diff(self._da.y.values) >= 0):
-            self._da = self._da.sel(y=slice(None, None, -1))
+            self._da = self._da.rename({y_dim: 'y', x_dim: 'x'})
+            if rgb_dim is None:
+                self.is_rgb = False
+            else:
+                self.is_rgb = True
+                self._da = self._da.rename({rgb_dim: 'rgb'})
 
-        # infer grid specifications (assume a rectangular grid)
-        y = self._da.y.values
-        x = self._da.x.values
+            # ensure latitudes are descending
+            if np.any(np.diff(self._da.y.values) >= 0):
+                self._da = self._da.sel(y=slice(None, None, -1))
 
-        self.x_left = float(x.min())
-        self.x_right = float(x.max())
-        self.y_lower = float(y.min())
-        self.y_upper = float(y.max())
+            # infer grid specifications (assume a rectangular grid)
+            y = self._da.y.values
+            x = self._da.x.values
 
-        self.dx = float((self.x_right - self.x_left) / (x.size - 1))
-        self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
+            self.x_left = float(x.min())
+            self.x_right = float(x.max())
+            self.y_lower = float(y.min())
+            self.y_upper = float(y.max())
 
-        if fit_bounds:
-            asyncio.ensure_future(self.async_fit_bounds())
-        else:
-            asyncio.ensure_future(self.async_wait_for_bounds())
+            self.dx = float((self.x_right - self.x_left) / (x.size - 1))
+            self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
 
-        self.l = LocalTileLayer()
-        if self._da.name is not None:
-            self.l.name = self._da.name
+            if fit_bounds:
+                asyncio.ensure_future(self.async_fit_bounds())
+            else:
+                asyncio.ensure_future(self.async_wait_for_bounds())
 
-        self._da_notransform = self._da
+            self.l = LocalTileLayer()
+            if self._da.name is not None:
+                self.l.name = self._da.name
 
-        self.spinner = Spinner()
-        self.spinner.radius = 5
-        self.spinner.length = 3
-        self.spinner.width = 5
-        self.spinner.lines = 8
-        self.spinner.color = '#000000'
-        self.spinner.layout.height = '30px'
-        self.spinner.layout.width = '30px'
-        self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
+            self._da_notransform = self._da
 
-        return self.l
+            self.spinner = Spinner()
+            self.spinner.radius = 5
+            self.spinner.length = 3
+            self.spinner.width = 5
+            self.spinner.lines = 8
+            self.spinner.color = '#000000'
+            self.spinner.layout.height = '30px'
+            self.spinner.layout.width = '30px'
+            self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
+
+            return self.l
 
 
     def select(self, draw_control=None):
-        if draw_control is None:
-            self._draw_control = DrawControl()
-            self._draw_control.polygon = {}
-            self._draw_control.polyline = {}
-            self._draw_control.circlemarker = {}
-            self._draw_control.rectangle = {
-                'shapeOptions': {
-                    'fillOpacity': 0.5
+        with self.debug_output:
+            if draw_control is None:
+                self._draw_control = DrawControl()
+                self._draw_control.polygon = {}
+                self._draw_control.polyline = {}
+                self._draw_control.circlemarker = {}
+                self._draw_control.rectangle = {
+                    'shapeOptions': {
+                        'fillOpacity': 0.5
+                    }
                 }
-            }
-        else:
-            self._draw_control = draw_control
-        self._draw_control.on_draw(self._get_selection)
-        self.m.add_control(self._draw_control)
+            else:
+                self._draw_control = draw_control
+            self._draw_control.on_draw(self._get_selection)
+            self.m.add_control(self._draw_control)
 
 
     def unselect(self):
-        self.m.remove_control(self._draw_control)
+        with self.debug_output:
+            self.m.remove_control(self._draw_control)
 
 
     def get_selection(self):
@@ -235,46 +242,48 @@ class LeafletMap(HasTraits):
 
 
     def _get_selection(self, *args, **kwargs):
-        if self._draw_control.last_draw['geometry'] is not None:
-            lonlat = self._draw_control.last_draw['geometry']['coordinates'][0]
-            lats = [ll[1] for ll in lonlat]
-            lons = [ll[0] for ll in lonlat]
-            lt0, lt1 = min(lats), max(lats)
-            ln0, ln1 = min(lons), max(lons)
-            self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
+        with self.debug_output:
+            if self._draw_control.last_draw['geometry'] is not None:
+                lonlat = self._draw_control.last_draw['geometry']['coordinates'][0]
+                lats = [ll[1] for ll in lonlat]
+                lons = [ll[0] for ll in lonlat]
+                lt0, lt1 = min(lats), max(lats)
+                ln0, ln1 = min(lons), max(lons)
+                self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
 
 
     def _start(self):
-        self.m.add_control(self.spinner_control)
-        self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
+        with self.debug_output:
+            self.m.add_control(self.spinner_control)
+            self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
 
-        self.url = self.m.window_url
-        if self.url.endswith('/lab'):
-            # we are in JupyterLab
-            self.base_url = self.url[:-4]
-        else:
-            if '/notebooks/' in self.url:
-                # we are in classical Notebook
-                i = self.url.rfind('/notebooks/')
-                self.base_url = self.url[:i]
-            elif '/voila/' in self.url:
-                # we are in Voila
-                i = self.url.rfind('/voila/')
-                self.base_url = self.url[:i]
+            self.url = self.m.window_url
+            if self.url.endswith('/lab'):
+                # we are in JupyterLab
+                self.base_url = self.url[:-4]
+            else:
+                if '/notebooks/' in self.url:
+                    # we are in classical Notebook
+                    i = self.url.rfind('/notebooks/')
+                    self.base_url = self.url[:i]
+                elif '/voila/' in self.url:
+                    # we are in Voila
+                    i = self.url.rfind('/voila/')
+                    self.base_url = self.url[:i]
 
-        if self.tile_dir is None:
-            self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
-            self.tile_path = self.tile_temp_dir.name
-        else:
-            self.tile_path = self.tile_dir
-        self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
-        self.l.path = self.url
+            if self.tile_dir is None:
+                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+                self.tile_path = self.tile_temp_dir.name
+            else:
+                self.tile_path = self.tile_dir
+            self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
+            self.l.path = self.url
 
-        self.m.remove_control(self.spinner_control)
-        self._get_tiles()
-        self.m.observe(self._get_tiles, names='pixel_bounds')
-        if not self.dynamic:
-            self.m.add_layer(self.l)
+            self.m.remove_control(self.spinner_control)
+            self._get_tiles()
+            self.m.observe(self._get_tiles, names='pixel_bounds')
+            if not self.dynamic:
+                self.m.add_layer(self.l)
 
 
     def _get_tiles(self, change=None):
@@ -377,43 +386,41 @@ class LeafletMap(HasTraits):
 
 
     async def async_wait_for_bounds(self):
-        if len(self.m.bounds) == 0:
-            await wait_for_change(self.m, 'bounds')
-        self.map_ready = True
+        with self.debug_output:
+            if len(self.m.bounds) == 0:
+                await wait_for_change(self.m, 'bounds')
+            self.map_ready = True
 
 
     async def async_fit_bounds(self):
-        center = self.y_lower + (self.y_upper - self.y_lower) / 2, self.x_left + (self.x_right - self.x_left) / 2
-        if center != self.m.center:
-            self.m.center = center
-            await wait_for_change(self.m, 'bounds')
-        zoomed_out = False
-        # zoom out
-        while True:
-            if self.m.zoom <= 1:
-                break
-            if self.debug_output is not None:
-                with self.debug_output:
-                    print('Zooming out')
-            (south, west), (north, east) = self.m.bounds
-            if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
-                self.m.zoom = self.m.zoom - 1
+        with self.debug_output:
+            center = self.y_lower + (self.y_upper - self.y_lower) / 2, self.x_left + (self.x_right - self.x_left) / 2
+            if center != self.m.center:
+                self.m.center = center
                 await wait_for_change(self.m, 'bounds')
-                zoomed_out = True
-            else:
-                break
-        if not zoomed_out:
-            # zoom in
+            zoomed_out = False
+            # zoom out
             while True:
-                if self.debug_output is not None:
-                    with self.debug_output:
-                        print('Zooming in')
+                if self.m.zoom <= 1:
+                    break
+                print('Zooming out')
                 (south, west), (north, east) = self.m.bounds
-                if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
-                    self.m.zoom = self.m.zoom + 1
-                    await wait_for_change(self.m, 'bounds')
-                else:
+                if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
                     self.m.zoom = self.m.zoom - 1
                     await wait_for_change(self.m, 'bounds')
+                    zoomed_out = True
+                else:
                     break
-        self.map_ready = True
+            if not zoomed_out:
+                # zoom in
+                while True:
+                    print('Zooming in')
+                    (south, west), (north, east) = self.m.bounds
+                    if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
+                        self.m.zoom = self.m.zoom + 1
+                        await wait_for_change(self.m, 'bounds')
+                    else:
+                        self.m.zoom = self.m.zoom - 1
+                        await wait_for_change(self.m, 'bounds')
+                        break
+            self.map_ready = True

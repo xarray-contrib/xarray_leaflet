@@ -262,14 +262,15 @@ class LeafletMap(HasTraits):
                 # we are in JupyterLab
                 self.base_url = self.url[:-4]
             else:
-                if '/notebooks/' in self.url:
-                    # we are in classical Notebook
-                    i = self.url.rfind('/notebooks/')
-                    self.base_url = self.url[:i]
-                elif '/voila/' in self.url:
+                if '/voila/' in self.url:
                     # we are in Voila
                     i = self.url.rfind('/voila/')
                     self.base_url = self.url[:i]
+                elif '/notebooks/' in self.url:
+                    # we are in classical Notebook
+                    i = self.url.find('/notebooks/')
+                    self.base_url = self.url[:i]
+
 
             if self.tile_dir is None:
                 self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')

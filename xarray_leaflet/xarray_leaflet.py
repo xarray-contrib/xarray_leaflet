@@ -49,6 +49,7 @@ class LeafletMap(HasTraits):
              tile_height=256,
              tile_width=256,
              resampling=Resampling.nearest,
+             get_base_url=None,
              debug_output=None):
         """Display an array as an interactive map.
 
@@ -93,6 +94,8 @@ class LeafletMap(HasTraits):
         resampling : int, optional
             The resampling method to use, see rasterio.warp.reproject
             (default: Resampling.nearest).
+        get_base_url: callable, optional
+            A function taking the window URL and returning the base URL to use.
 
         Returns
         -------
@@ -106,6 +109,8 @@ class LeafletMap(HasTraits):
             self.debug_output = debug_output
 
         with self.debug_output:
+            self.get_base_url = get_base_url
+
             if 'proj4def' in m.crs:
                 # it's a custom projection
                 if dynamic:
@@ -258,18 +263,21 @@ class LeafletMap(HasTraits):
             self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
 
             self.url = self.m.window_url
-            if self.url.endswith('/lab'):
-                # we are in JupyterLab
-                self.base_url = self.url[:-4]
+            if self.get_base_url is not None:
+                self.base_url = self.get_base_url(self.url)
             else:
-                if '/notebooks/' in self.url:
-                    # we are in classical Notebook
-                    i = self.url.rfind('/notebooks/')
-                    self.base_url = self.url[:i]
-                elif '/voila/' in self.url:
-                    # we are in Voila
-                    i = self.url.rfind('/voila/')
-                    self.base_url = self.url[:i]
+                if self.url.endswith('/lab'):
+                    # we are in JupyterLab
+                    self.base_url = self.url[:-4]
+                else:
+                    if '/notebooks/' in self.url:
+                        # we are in classical Notebook
+                        i = self.url.rfind('/notebooks/')
+                        self.base_url = self.url[:i]
+                    elif '/voila/' in self.url:
+                        # we are in Voila
+                        i = self.url.rfind('/voila/')
+                        self.base_url = self.url[:i]
 
             if self.tile_dir is None:
                 self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
@@ -403,7 +411,6 @@ class LeafletMap(HasTraits):
             while True:
                 if self.m.zoom <= 1:
                     break
-                print('Zooming out')
                 (south, west), (north, east) = self.m.bounds
                 if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
                     self.m.zoom = self.m.zoom - 1
@@ -414,7 +421,6 @@ class LeafletMap(HasTraits):
             if not zoomed_out:
                 # zoom in
                 while True:
-                    print('Zooming in')
                     (south, west), (north, east) = self.m.bounds
                     if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
                         self.m.zoom = self.m.zoom + 1

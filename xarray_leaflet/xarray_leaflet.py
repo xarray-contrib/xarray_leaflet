@@ -66,6 +66,8 @@ class LeafletMap(HasTraits):
         x_dim : str, optional
             Name of the x dimension/coordinate
             (default: 'x').
+        fit_bounds: bool, optional
+            Set the map to fit the bounds of the array (default True).
         rgb_dim : str, optional
             Name of the RGB dimension/coordinate
             (default: None).

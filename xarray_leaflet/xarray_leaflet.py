@@ -1,14 +1,16 @@
 import os
 import asyncio
-from tempfile import TemporaryDirectory
+import tempfile
 
 import xarray as xr
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
 from ipywidgets import Output
+from IPython.display import display, Image
 from traitlets import HasTraits, Bool, observe
 from rasterio.warp import Resampling
 
@@ -43,6 +45,7 @@ class LeafletMap(HasTraits):
              transform2=coarsen(),
              transform3=passthrough,
              colormap=None,
+             colorbar_position='topright',
              persist=True,
              dynamic=False,
              tile_dir=None,
@@ -81,7 +84,9 @@ class LeafletMap(HasTraits):
             Transformation over a tile before saving to PNG.
         colormap : function, optional
             The colormap function to use for the tile PNG
-            (default: matplotlib.pyplot.cm.inferno).
+            (default: matplotlib.pyplot.cm.viridis).
+        colorbar_position : str, optional
+            Where to show the colorbar (default: "topright").
         persist : bool, optional
             Whether to keep the tile files (True) or not (False).
         dynamic : bool, optional
@@ -149,7 +154,7 @@ class LeafletMap(HasTraits):
                 )
             elif rgb_dim is None:
                 if colormap is None:
-                    colormap = plt.cm.inferno
+                    colormap = plt.cm.viridis
                 if transform0 is None:
                     transform0 = normalize
             else:
@@ -170,6 +175,8 @@ class LeafletMap(HasTraits):
             self.transform2 = transform2
             self.transform3 = transform3
             self.colormap = colormap
+            self.colorbar = None
+            self.colorbar_position = colorbar_position
             if self.dynamic:
                 self.persist = False
                 self.tile_dir = None
@@ -282,7 +289,7 @@ class LeafletMap(HasTraits):
                         self.base_url = self.url[:i_voila]
 
             if self.tile_dir is None:
-                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+                self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
                 self.tile_path = self.tile_temp_dir.name
             else:
                 self.tile_path = self.tile_dir
@@ -293,7 +300,30 @@ class LeafletMap(HasTraits):
             self._get_tiles()
             self.m.observe(self._get_tiles, names='pixel_bounds')
             if not self.dynamic:
+                self._show_colorbar(self._da_notransform)
                 self.m.add_layer(self.l)
+
+
+    def _show_colorbar(self, da):
+        if self.colorbar_position and self.colormap is not None:
+            vmin = da.min().values
+            vmax = da.max().values
+            fig = plt.figure(figsize=(8, 3))
+            ax = fig.add_axes([0.05, 0.8, 0.5, 0.07]);
+            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+            cbar = mpl.colorbar.ColorbarBase(ax, cmap=self.colormap, norm=norm, orientation='horizontal')
+            f = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            output = Output()
+            try:
+                plt.savefig(f.name, bbox_inches='tight')
+                with output:
+                    display(Image(filename=f.name))
+            finally:
+                os.unlink(f.name)
+                f.close()
+            self.colorbar = WidgetControl(widget=output, position=self.colorbar_position, transparent_bg=True)
+            self.m.add_control(self.colorbar)
+            plt.close()
 
 
     def _get_tiles(self, change=None):
@@ -301,7 +331,7 @@ class LeafletMap(HasTraits):
             self.m.add_control(self.spinner_control)
             if self.dynamic:
                 self.tile_temp_dir.cleanup()
-                self.tile_temp_dir = TemporaryDirectory(prefix='xarray_leaflet_')
+                self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
                 new_tile_path = self.tile_temp_dir.name
                 new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
                 if self.l in self.m.layers:
@@ -388,6 +418,9 @@ class LeafletMap(HasTraits):
                             write_image(path, da_tile*255, self.persist)
 
             if self.dynamic:
+                if self.colorbar in self.m.controls:
+                    self.m.remove_control(self.colorbar)
+                self._show_colorbar(self._da_notransform.sel(y=slice(north, south), x=slice(west, east)))
                 self.l.path = self.url
                 self.m.add_layer(self.l)
                 self.l.redraw()

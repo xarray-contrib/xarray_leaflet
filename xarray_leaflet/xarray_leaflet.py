@@ -9,6 +9,8 @@ import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
 from ipywidgets import Output
+from IPython.display import display
+from branca.colormap import linear
 from traitlets import HasTraits, Bool, observe
 from rasterio.warp import Resampling
 
@@ -43,6 +45,7 @@ class LeafletMap(HasTraits):
              transform2=coarsen(),
              transform3=passthrough,
              colormap=None,
+             colorbar_position='topright',
              persist=True,
              dynamic=False,
              tile_dir=None,
@@ -79,9 +82,11 @@ class LeafletMap(HasTraits):
             Transformation over a tile before reprojection.
         transform3 : function, optional
             Transformation over a tile before saving to PNG.
-        colormap : function, optional
+        colormap : str or function, optional
             The colormap function to use for the tile PNG
-            (default: matplotlib.pyplot.cm.inferno).
+            (default: "viridis").
+        colorbar_position : str, optional
+            Where to show the colorbar (default: "topright").
         persist : bool, optional
             Whether to keep the tile files (True) or not (False).
         dynamic : bool, optional
@@ -149,7 +154,7 @@ class LeafletMap(HasTraits):
                 )
             elif rgb_dim is None:
                 if colormap is None:
-                    colormap = plt.cm.inferno
+                    colormap = "viridis"
                 if transform0 is None:
                     transform0 = normalize
             else:
@@ -170,6 +175,13 @@ class LeafletMap(HasTraits):
             self.transform2 = transform2
             self.transform3 = transform3
             self.colormap = colormap
+            self.colorbar = None
+            if type(colormap) is str:
+                # only string colormap is supported when showing colorbar
+                # and the colormap has to be supported in matplotlib and branca
+                self.colorbar_position = colorbar_position
+            else:
+                self.colorbar_position = ""
             if self.dynamic:
                 self.persist = False
                 self.tile_dir = None
@@ -293,6 +305,15 @@ class LeafletMap(HasTraits):
             self._get_tiles()
             self.m.observe(self._get_tiles, names='pixel_bounds')
             if not self.dynamic:
+                if self.colorbar_position:
+                    vmin = self._da_notransform.min().values
+                    vmax = self._da_notransform.max().values
+                    cmap = getattr(linear, self.colormap).scale(vmin=vmin, vmax=vmax)
+                    output = Output()
+                    with output:
+                        display(cmap)
+                    self.colorbar = WidgetControl(widget=output, position=self.colorbar_position, transparent_bg=True)
+                    self.m.add_control(self.colorbar)
                 self.m.add_layer(self.l)
 
 
@@ -384,10 +405,25 @@ class LeafletMap(HasTraits):
                             da_tile = np.stack(das, axis=2)
                             write_image(path, da_tile, self.persist)
                         else:
-                            da_tile = self.colormap(das[0])
+                            if type(self.colormap) is str:
+                                cmap = plt.get_cmap(self.colormap)
+                            else:
+                                cmap = self.colormap
+                            da_tile = cmap(das[0])
                             write_image(path, da_tile*255, self.persist)
 
             if self.dynamic:
+                if self.colorbar_position:
+                    vmin = self._da_notransform.sel(y=slice(north, south), x=slice(west, east)).min().values
+                    vmax = self._da_notransform.sel(y=slice(north, south), x=slice(west, east)).max().values
+                    cmap = getattr(linear, self.colormap).scale(vmin=vmin, vmax=vmax)
+                    output = Output()
+                    with output:
+                        display(cmap)
+                    if self.colorbar in self.m.controls:
+                        self.m.remove_control(self.colorbar)
+                    self.colorbar = WidgetControl(widget=output, position=self.colorbar_position, transparent_bg=True)
+                    self.m.add_control(self.colorbar)
                 self.l.path = self.url
                 self.m.add_layer(self.l)
                 self.l.redraw()

@@ -1,0 +1,8 @@
+jupyter_server>=0.2.0
+rioxarray>=0.0.30
+ipyleaflet>=0.13.1
+pillow>=7
+matplotlib>=3
+affine>=2
+mercantile>=1
+ipyspin>=0.1.1

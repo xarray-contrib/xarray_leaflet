@@ -121,19 +121,19 @@ class LeafletMap(HasTraits):
             if 'proj4def' in m.crs:
                 # it's a custom projection
                 if dynamic:
-                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+                    raise RuntimeError(f'Dynamic maps are only supported for Web Mercator (EPSG:3857), not {m.crs}')
                 self.dst_crs = m.crs['proj4def']
                 self.web_mercator = False
                 self.custom_proj = True
             elif m.crs['name'].startswith('EPSG'):
                 epsg = m.crs['name'][4:]
                 if dynamic and epsg != '3857':
-                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+                    raise RuntimeError(f'Dynamic maps are only supported for Web Mercator (EPSG:3857), not {m.crs}')
                 self.dst_crs = 'EPSG:' + epsg
                 self.web_mercator = epsg == '3857'
                 self.custom_proj = False
             else:
-                raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
+                raise RuntimeError(f'Unsupported map projection: {m.crs}')
 
             self.nodata = self._da.rio.nodata
             var_dims = self._da.dims
@@ -143,8 +143,8 @@ class LeafletMap(HasTraits):
             if set(var_dims) != set(expected_dims):
                 raise ValueError(
                     "Invalid dimensions in DataArray: "
-                    "should include only {}, found {}."
-                    .format(tuple(expected_dims), var_dims)
+                    f"should include only {tuple(expected_dims)}, found {var_dims}."
+                    
                 )
 
             if rgb_dim is not None and colormap is not None:

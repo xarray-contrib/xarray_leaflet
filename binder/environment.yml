@@ -6,4 +6,6 @@ dependencies:
   - tqdm
   - scipy
   - dask
-  - xarray_leaflet
+  - pip
+  - pip:
+    - git+https://github.com/davidbrochart/xarray_leaflet.git@fix_tile_url#egg=xarray_leaflet

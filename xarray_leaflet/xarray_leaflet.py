@@ -271,29 +271,12 @@ class LeafletMap(HasTraits):
             self.m.add_control(self.spinner_control)
             self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
 
-            self.url = self.m.window_url
-            if self.get_base_url is not None:
-                self.base_url = self.get_base_url(self.url)
-            else:
-                if self.url.endswith('/lab'):
-                    # we are in JupyterLab
-                    self.base_url = self.url[:-4]
-                else:
-                    i_notebooks = self.url.find('/notebooks/')
-                    i_voila = self.url.find('/voila/')
-                    if i_notebooks != -1 and (i_voila == -1 or i_voila > i_notebooks):
-                        # we are in classical Notebooks
-                        self.base_url = self.url[:i_notebooks]
-                    elif i_voila != -1 and (i_notebooks == -1 or i_notebooks > i_voila):
-                        # we are in Voila
-                        self.base_url = self.url[:i_voila]
-
             if self.tile_dir is None:
                 self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
                 self.tile_path = self.tile_temp_dir.name
             else:
                 self.tile_path = self.tile_dir
-            self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
+            self.url = '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
             self.l.path = self.url
 
             self.m.remove_control(self.spinner_control)
@@ -333,7 +316,7 @@ class LeafletMap(HasTraits):
                 self.tile_temp_dir.cleanup()
                 self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
                 new_tile_path = self.tile_temp_dir.name
-                new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
+                new_url = '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
                 if self.l in self.m.layers:
                     self.m.remove_layer(self.l)
 

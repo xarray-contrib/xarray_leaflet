@@ -9,6 +9,7 @@ import numpy as np
 import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
+from ipyurl import Url
 from ipywidgets import Output
 from IPython.display import display, Image
 from traitlets import HasTraits, Bool, observe
@@ -116,8 +117,6 @@ class LeafletMap(HasTraits):
             self.debug_output = debug_output
 
         with self.debug_output:
-            self.get_base_url = get_base_url
-
             if 'proj4def' in m.crs:
                 # it's a custom projection
                 if dynamic:
@@ -204,6 +203,13 @@ class LeafletMap(HasTraits):
             self.dx = float((self.x_right - self.x_left) / (x.size - 1))
             self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
 
+            if get_base_url is not None:
+                self.base_url = get_base_url(self.m.window_url)
+            else:
+                self.url_widget = Url()
+                display(self.url_widget)
+                self.base_url = self.url_widget.url.rstrip('/') or None
+
             if fit_bounds:
                 asyncio.ensure_future(self.async_fit_bounds())
             else:
@@ -276,7 +282,7 @@ class LeafletMap(HasTraits):
                 self.tile_path = self.tile_temp_dir.name
             else:
                 self.tile_path = self.tile_dir
-            self.url = '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
+            self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
             self.l.path = self.url
 
             self.m.remove_control(self.spinner_control)
@@ -316,7 +322,7 @@ class LeafletMap(HasTraits):
                 self.tile_temp_dir.cleanup()
                 self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
                 new_tile_path = self.tile_temp_dir.name
-                new_url = '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
+                new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
                 if self.l in self.m.layers:
                     self.m.remove_layer(self.l)
 
@@ -415,6 +421,8 @@ class LeafletMap(HasTraits):
         with self.debug_output:
             if len(self.m.bounds) == 0:
                 await wait_for_change(self.m, 'bounds')
+            if self.base_url is None:
+                self.base_url = await self.url_widget.get_url().rstrip('/')
             self.map_ready = True
 
 
@@ -447,4 +455,6 @@ class LeafletMap(HasTraits):
                         self.m.zoom = self.m.zoom - 1
                         await wait_for_change(self.m, 'bounds')
                         break
+            if self.base_url is None:
+                self.base_url = await self.url_widget.get_url().rstrip('/')
             self.map_ready = True

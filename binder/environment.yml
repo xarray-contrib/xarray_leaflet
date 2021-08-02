@@ -9,3 +9,6 @@ dependencies:
   - rasterio=1.2.6
   - jupyterlab=3
   - xarray_leaflet
+  - pip
+  - pip:
+    - ipyurl

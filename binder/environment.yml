@@ -11,4 +11,4 @@ dependencies:
   - xarray_leaflet
   - pip
   - pip:
-    - ipyurl
+    - ipyurl=0.1.2

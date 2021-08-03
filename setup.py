@@ -21,7 +21,8 @@ requirements = [
     'matplotlib>=3',
     'affine>=2',
     'mercantile>=1',
-    'ipyspin>=0.1.1'
+    'ipyspin>=0.1.1',
+    'ipyurl>=0.1.2',
 ]
 
 setup_requirements = [ ]

@@ -10,6 +10,7 @@ import mercantile
 from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
 from ipywidgets import Output
+from ipyurl import Url
 from IPython.display import display, Image
 from traitlets import HasTraits, Bool, observe
 from rasterio.warp import Resampling
@@ -52,8 +53,7 @@ class LeafletMap(HasTraits):
              tile_height=256,
              tile_width=256,
              resampling=Resampling.nearest,
-             get_base_url=None,
-             debug_output=None):
+             get_base_url=None):
         """Display an array as an interactive map.
 
         Assumes that the pixels are given on a regular grid
@@ -110,145 +110,143 @@ class LeafletMap(HasTraits):
             A handler to the layer that is added to the map.
         """
 
-        if debug_output is None:
-            self.debug_output = Output()
+
+        if 'proj4def' in m.crs:
+            # it's a custom projection
+            if dynamic:
+                raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+            self.dst_crs = m.crs['proj4def']
+            self.web_mercator = False
+            self.custom_proj = True
+        elif m.crs['name'].startswith('EPSG'):
+            epsg = m.crs['name'][4:]
+            if dynamic and epsg != '3857':
+                raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
+            self.dst_crs = 'EPSG:' + epsg
+            self.web_mercator = epsg == '3857'
+            self.custom_proj = False
         else:
-            self.debug_output = debug_output
+            raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
 
-        with self.debug_output:
-            self.get_base_url = get_base_url
+        self.nodata = self._da.rio.nodata
+        var_dims = self._da.dims
+        expected_dims = [y_dim, x_dim]
+        if rgb_dim is not None:
+            expected_dims.append(rgb_dim)
+        if set(var_dims) != set(expected_dims):
+            raise ValueError(
+                "Invalid dimensions in DataArray: "
+                "should include only {}, found {}."
+                .format(tuple(expected_dims), var_dims)
+            )
 
-            if 'proj4def' in m.crs:
-                # it's a custom projection
-                if dynamic:
-                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
-                self.dst_crs = m.crs['proj4def']
-                self.web_mercator = False
-                self.custom_proj = True
-            elif m.crs['name'].startswith('EPSG'):
-                epsg = m.crs['name'][4:]
-                if dynamic and epsg != '3857':
-                    raise RuntimeError('Dynamic maps are only supported for Web Mercator (EPSG:3857), not {}'.format(m.crs))
-                self.dst_crs = 'EPSG:' + epsg
-                self.web_mercator = epsg == '3857'
-                self.custom_proj = False
-            else:
-                raise RuntimeError('Unsupported map projection: {}'.format(m.crs))
+        if rgb_dim is not None and colormap is not None:
+            raise ValueError(
+                "Cannot have a RGB dimension and a "
+                "colormap at the same time."
+            )
+        elif rgb_dim is None:
+            if colormap is None:
+                colormap = plt.cm.viridis
+            if transform0 is None:
+                transform0 = normalize
+        else:
+            # there is a RGB dimension
+            if transform0 is None:
+                transform0 = passthrough
 
-            self.nodata = self._da.rio.nodata
-            var_dims = self._da.dims
-            expected_dims = [y_dim, x_dim]
-            if rgb_dim is not None:
-                expected_dims.append(rgb_dim)
-            if set(var_dims) != set(expected_dims):
-                raise ValueError(
-                    "Invalid dimensions in DataArray: "
-                    "should include only {}, found {}."
-                    .format(tuple(expected_dims), var_dims)
-                )
+        self.resampling = resampling
+        self.tile_dir = tile_dir
+        self.persist = persist
+        self.attrs = self._da.attrs
+        self.m = m
+        self.dynamic = dynamic
+        self.tile_width = tile_width
+        self.tile_height = tile_height
+        self.transform0 = transform0
+        self.transform1 = transform1
+        self.transform2 = transform2
+        self.transform3 = transform3
+        self.colormap = colormap
+        self.colorbar = None
+        self.colorbar_position = colorbar_position
+        if self.dynamic:
+            self.persist = False
+            self.tile_dir = None
 
-            if rgb_dim is not None and colormap is not None:
-                raise ValueError(
-                    "Cannot have a RGB dimension and a "
-                    "colormap at the same time."
-                )
-            elif rgb_dim is None:
-                if colormap is None:
-                    colormap = plt.cm.viridis
-                if transform0 is None:
-                    transform0 = normalize
-            else:
-                # there is a RGB dimension
-                if transform0 is None:
-                    transform0 = passthrough
+        self._da = self._da.rename({y_dim: 'y', x_dim: 'x'})
+        if rgb_dim is None:
+            self.is_rgb = False
+        else:
+            self.is_rgb = True
+            self._da = self._da.rename({rgb_dim: 'rgb'})
 
-            self.resampling = resampling
-            self.tile_dir = tile_dir
-            self.persist = persist
-            self.attrs = self._da.attrs
-            self.m = m
-            self.dynamic = dynamic
-            self.tile_width = tile_width
-            self.tile_height = tile_height
-            self.transform0 = transform0
-            self.transform1 = transform1
-            self.transform2 = transform2
-            self.transform3 = transform3
-            self.colormap = colormap
-            self.colorbar = None
-            self.colorbar_position = colorbar_position
-            if self.dynamic:
-                self.persist = False
-                self.tile_dir = None
+        # ensure latitudes are descending
+        if np.any(np.diff(self._da.y.values) >= 0):
+            self._da = self._da.sel(y=slice(None, None, -1))
 
-            self._da = self._da.rename({y_dim: 'y', x_dim: 'x'})
-            if rgb_dim is None:
-                self.is_rgb = False
-            else:
-                self.is_rgb = True
-                self._da = self._da.rename({rgb_dim: 'rgb'})
+        # infer grid specifications (assume a rectangular grid)
+        y = self._da.y.values
+        x = self._da.x.values
 
-            # ensure latitudes are descending
-            if np.any(np.diff(self._da.y.values) >= 0):
-                self._da = self._da.sel(y=slice(None, None, -1))
+        self.x_left = float(x.min())
+        self.x_right = float(x.max())
+        self.y_lower = float(y.min())
+        self.y_upper = float(y.max())
 
-            # infer grid specifications (assume a rectangular grid)
-            y = self._da.y.values
-            x = self._da.x.values
+        self.dx = float((self.x_right - self.x_left) / (x.size - 1))
+        self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
 
-            self.x_left = float(x.min())
-            self.x_right = float(x.max())
-            self.y_lower = float(y.min())
-            self.y_upper = float(y.max())
+        if get_base_url is None:
+            self.base_url = None
+            self.url_widget = Url()
+            display(self.url_widget)
+        else:
+            self.base_url = get_base_url(self.m.window_url)
 
-            self.dx = float((self.x_right - self.x_left) / (x.size - 1))
-            self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
+        if fit_bounds:
+            asyncio.ensure_future(self.async_fit_bounds())
+        else:
+            asyncio.ensure_future(self.async_wait_for_bounds())
 
-            if fit_bounds:
-                asyncio.ensure_future(self.async_fit_bounds())
-            else:
-                asyncio.ensure_future(self.async_wait_for_bounds())
+        self.l = LocalTileLayer()
+        if self._da.name is not None:
+            self.l.name = self._da.name
 
-            self.l = LocalTileLayer()
-            if self._da.name is not None:
-                self.l.name = self._da.name
+        self._da_notransform = self._da
 
-            self._da_notransform = self._da
+        self.spinner = Spinner()
+        self.spinner.radius = 5
+        self.spinner.length = 3
+        self.spinner.width = 5
+        self.spinner.lines = 8
+        self.spinner.color = '#000000'
+        self.spinner.layout.height = '30px'
+        self.spinner.layout.width = '30px'
+        self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
 
-            self.spinner = Spinner()
-            self.spinner.radius = 5
-            self.spinner.length = 3
-            self.spinner.width = 5
-            self.spinner.lines = 8
-            self.spinner.color = '#000000'
-            self.spinner.layout.height = '30px'
-            self.spinner.layout.width = '30px'
-            self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
-
-            return self.l
+        return self.l
 
 
     def select(self, draw_control=None):
-        with self.debug_output:
-            if draw_control is None:
-                self._draw_control = DrawControl()
-                self._draw_control.polygon = {}
-                self._draw_control.polyline = {}
-                self._draw_control.circlemarker = {}
-                self._draw_control.rectangle = {
-                    'shapeOptions': {
-                        'fillOpacity': 0.5
-                    }
+        if draw_control is None:
+            self._draw_control = DrawControl()
+            self._draw_control.polygon = {}
+            self._draw_control.polyline = {}
+            self._draw_control.circlemarker = {}
+            self._draw_control.rectangle = {
+                'shapeOptions': {
+                    'fillOpacity': 0.5
                 }
-            else:
-                self._draw_control = draw_control
-            self._draw_control.on_draw(self._get_selection)
-            self.m.add_control(self._draw_control)
+            }
+        else:
+            self._draw_control = draw_control
+        self._draw_control.on_draw(self._get_selection)
+        self.m.add_control(self._draw_control)
 
 
     def unselect(self):
-        with self.debug_output:
-            self.m.remove_control(self._draw_control)
+        self.m.remove_control(self._draw_control)
 
 
     def get_selection(self):
@@ -256,52 +254,33 @@ class LeafletMap(HasTraits):
 
 
     def _get_selection(self, *args, **kwargs):
-        with self.debug_output:
-            if self._draw_control.last_draw['geometry'] is not None:
-                lonlat = self._draw_control.last_draw['geometry']['coordinates'][0]
-                lats = [ll[1] for ll in lonlat]
-                lons = [ll[0] for ll in lonlat]
-                lt0, lt1 = min(lats), max(lats)
-                ln0, ln1 = min(lons), max(lons)
-                self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
+        if self._draw_control.last_draw['geometry'] is not None:
+            lonlat = self._draw_control.last_draw['geometry']['coordinates'][0]
+            lats = [ll[1] for ll in lonlat]
+            lons = [ll[0] for ll in lonlat]
+            lt0, lt1 = min(lats), max(lats)
+            ln0, ln1 = min(lons), max(lons)
+            self._da_selected = self._da_notransform.sel(y=slice(lt1, lt0), x=slice(ln0, ln1))
 
 
     def _start(self):
-        with self.debug_output:
-            self.m.add_control(self.spinner_control)
-            self._da, self.transform0_args = get_transform(self.transform0(self._da, debug_output=self.debug_output))
+        self.m.add_control(self.spinner_control)
+        self._da, self.transform0_args = get_transform(self.transform0(self._da))
 
-            self.url = self.m.window_url
-            if self.get_base_url is not None:
-                self.base_url = self.get_base_url(self.url)
-            else:
-                if self.url.endswith('/lab'):
-                    # we are in JupyterLab
-                    self.base_url = self.url[:-4]
-                else:
-                    i_notebooks = self.url.find('/notebooks/')
-                    i_voila = self.url.find('/voila/')
-                    if i_notebooks != -1 and (i_voila == -1 or i_voila > i_notebooks):
-                        # we are in classical Notebooks
-                        self.base_url = self.url[:i_notebooks]
-                    elif i_voila != -1 and (i_notebooks == -1 or i_notebooks > i_voila):
-                        # we are in Voila
-                        self.base_url = self.url[:i_voila]
+        if self.tile_dir is None:
+            self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
+            self.tile_path = self.tile_temp_dir.name
+        else:
+            self.tile_path = self.tile_dir
+        self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
+        self.l.path = self.url
 
-            if self.tile_dir is None:
-                self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
-                self.tile_path = self.tile_temp_dir.name
-            else:
-                self.tile_path = self.tile_dir
-            self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
-            self.l.path = self.url
-
-            self.m.remove_control(self.spinner_control)
-            self._get_tiles()
-            self.m.observe(self._get_tiles, names='pixel_bounds')
-            if not self.dynamic:
-                self._show_colorbar(self._da_notransform)
-                self.m.add_layer(self.l)
+        self.m.remove_control(self.spinner_control)
+        self._get_tiles()
+        self.m.observe(self._get_tiles, names='pixel_bounds')
+        if not self.dynamic:
+            self._show_colorbar(self._da_notransform)
+            self.m.add_layer(self.l)
 
 
     def _show_colorbar(self, da):
@@ -327,141 +306,142 @@ class LeafletMap(HasTraits):
 
 
     def _get_tiles(self, change=None):
-        with self.debug_output:
-            self.m.add_control(self.spinner_control)
-            if self.dynamic:
-                self.tile_temp_dir.cleanup()
-                self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
-                new_tile_path = self.tile_temp_dir.name
-                new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
-                if self.l in self.m.layers:
-                    self.m.remove_layer(self.l)
+        self.m.add_control(self.spinner_control)
+        if self.dynamic:
+            self.tile_temp_dir.cleanup()
+            self.tile_temp_dir = tempfile.TemporaryDirectory(prefix='xarray_leaflet_')
+            new_tile_path = self.tile_temp_dir.name
+            new_url = self.base_url + '/xarray_leaflet' + new_tile_path + '/{z}/{x}/{y}.png'
+            if self.l in self.m.layers:
+                self.m.remove_layer(self.l)
 
-            (left, top), (right, bottom) = self.m.pixel_bounds
-            (south, west), (north, east) = self.m.bounds
-            z = int(self.m.zoom)  # TODO: support non-integer zoom levels?
-            if self.custom_proj:
-                resolution = self.m.crs['resolutions'][z]
+        (left, top), (right, bottom) = self.m.pixel_bounds
+        (south, west), (north, east) = self.m.bounds
+        z = int(self.m.zoom)  # TODO: support non-integer zoom levels?
+        if self.custom_proj:
+            resolution = self.m.crs['resolutions'][z]
 
-            if self.web_mercator:
-                tiles = list(mercantile.tiles(west, south, east, north, z))
-            else:
-                x0, x1 = int(left) // self.tile_width, int(right) // self.tile_width + 1
-                y0, y1 = int(top) // self.tile_height, int(bottom) // self.tile_height + 1
-                tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
+        if self.web_mercator:
+            tiles = list(mercantile.tiles(west, south, east, north, z))
+        else:
+            x0, x1 = int(left) // self.tile_width, int(right) // self.tile_width + 1
+            y0, y1 = int(top) // self.tile_height, int(bottom) // self.tile_height + 1
+            tiles = [mercantile.Tile(x, y, z) for x in range(x0, x1) for y in range(y0, y1)]
 
-            if self.dynamic:
-                # dynamic maps are redrawn at each interaction with the map
-                # so we can take exactly the corresponding slice in the original data
-                da_visible = self._da.sel(y=slice(north, south), x=slice(west, east))
-            elif self.web_mercator:
-                # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
-                # so we must slice the original data on tile boundaries
-                bbox = get_bbox_tiles(tiles)
-                # take one more source data point to avoid glitches
-                da_visible = self._da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
-            else:
-                # it's a custom projection or not web mercator, the visible tiles don't translate easily
-                # to a slice of the original data, so we keep everything
-                # TODO: slice the data for EPSG3395, EPSG4326, Earth, Base and Simple
-                da_visible = self._da
+        if self.dynamic:
+            # dynamic maps are redrawn at each interaction with the map
+            # so we can take exactly the corresponding slice in the original data
+            da_visible = self._da.sel(y=slice(north, south), x=slice(west, east))
+        elif self.web_mercator:
+            # for static web mercator maps we can't redraw a tile once it has been (partly) displayed,
+            # so we must slice the original data on tile boundaries
+            bbox = get_bbox_tiles(tiles)
+            # take one more source data point to avoid glitches
+            da_visible = self._da.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
+        else:
+            # it's a custom projection or not web mercator, the visible tiles don't translate easily
+            # to a slice of the original data, so we keep everything
+            # TODO: slice the data for EPSG3395, EPSG4326, Earth, Base and Simple
+            da_visible = self._da
 
-            # check if we have some data to show
-            if 0 not in da_visible.shape:
-                da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args, debug_output=self.debug_output))
+        # check if we have some data to show
+        if 0 not in da_visible.shape:
+            da_visible, transform1_args = get_transform(self.transform1(da_visible, *self.transform0_args))
 
-            if self.dynamic:
-                self.tile_path = new_tile_path
-                self.url = new_url
+        if self.dynamic:
+            self.tile_path = new_tile_path
+            self.url = new_url
 
-            for tile in tiles:
-                x, y, z = tile
-                path = f'{self.tile_path}/{z}/{x}/{y}.png'
-                # if static map, check if we already have the tile
-                # if dynamic map, new tiles are always created
-                if self.dynamic or not os.path.exists(path):
-                    if self.web_mercator:
-                        bbox = mercantile.bounds(tile)
-                        xy_bbox = mercantile.xy_bounds(tile)
-                        x_pix = (xy_bbox.right - xy_bbox.left) / self.tile_width
-                        y_pix = (xy_bbox.top - xy_bbox.bottom) / self.tile_height
-                        # take one more source data point to avoid glitches
-                        da_tile = da_visible.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
+        for tile in tiles:
+            x, y, z = tile
+            path = f'{self.tile_path}/{z}/{x}/{y}.png'
+            # if static map, check if we already have the tile
+            # if dynamic map, new tiles are always created
+            if self.dynamic or not os.path.exists(path):
+                if self.web_mercator:
+                    bbox = mercantile.bounds(tile)
+                    xy_bbox = mercantile.xy_bounds(tile)
+                    x_pix = (xy_bbox.right - xy_bbox.left) / self.tile_width
+                    y_pix = (xy_bbox.top - xy_bbox.bottom) / self.tile_height
+                    # take one more source data point to avoid glitches
+                    da_tile = da_visible.sel(y=slice(bbox.north + self.dy, bbox.south - self.dy), x=slice(bbox.west - self.dx, bbox.east + self.dx))
+                else:
+                    da_tile = da_visible
+                # check if we have data for this tile
+                if 0 in da_tile.shape:
+                    write_image(path, None, self.persist)
+                else:
+                    da_tile.attrs = self.attrs
+                    da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height), *transform1_args)
+                    # reproject each RGB component if needed
+                    # TODO: must be doable with xarray.apply_ufunc
+                    if self.is_rgb:
+                        das = [da_tile.isel(rgb=i) for i in range(3)]
                     else:
-                        da_tile = da_visible
-                    # check if we have data for this tile
-                    if 0 in da_tile.shape:
-                        write_image(path, None, self.persist)
+                        das = [da_tile]
+                    for i in range(len(das)):
+                        das[i] = das[i].rio.write_nodata(self.nodata)
+                        if self.custom_proj:
+                            das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
+                        else:
+                            das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
+                        das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args))
+                    if self.is_rgb:
+                        alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
+                        das.append(alpha)
+                        da_tile = np.stack(das, axis=2)
+                        write_image(path, da_tile, self.persist)
                     else:
-                        da_tile.attrs = self.attrs
-                        da_tile, transform2_args = get_transform(self.transform2(da_tile, tile_width=self.tile_width, tile_height=self.tile_height, debug_output=self.debug_output), *transform1_args)
-                        # reproject each RGB component if needed
-                        # TODO: must be doable with xarray.apply_ufunc
-                        if self.is_rgb:
-                            das = [da_tile.isel(rgb=i) for i in range(3)]
-                        else:
-                            das = [da_tile]
-                        for i in range(len(das)):
-                            das[i] = das[i].rio.write_nodata(self.nodata)
-                            if self.custom_proj:
-                                das[i] = reproject_custom(das[i], self.dst_crs, x, y, z, resolution, resolution, self.tile_width, self.tile_height, self.resampling)
-                            else:
-                                das[i] = reproject_not_custom(das[i], self.dst_crs, xy_bbox.left, xy_bbox.top, x_pix, y_pix, self.tile_width, self.tile_height, self.resampling)
-                            das[i], transform3_args = get_transform(self.transform3(das[i], *transform2_args, debug_output=self.debug_output))
-                        if self.is_rgb:
-                            alpha = np.where(das[0]==self._da.rio.nodata, 0, 255)
-                            das.append(alpha)
-                            da_tile = np.stack(das, axis=2)
-                            write_image(path, da_tile, self.persist)
-                        else:
-                            da_tile = self.colormap(das[0])
-                            write_image(path, da_tile*255, self.persist)
+                        da_tile = self.colormap(das[0])
+                        write_image(path, da_tile*255, self.persist)
 
-            if self.dynamic:
-                if self.colorbar in self.m.controls:
-                    self.m.remove_control(self.colorbar)
-                self._show_colorbar(self._da_notransform.sel(y=slice(north, south), x=slice(west, east)))
-                self.l.path = self.url
-                self.m.add_layer(self.l)
-                self.l.redraw()
+        if self.dynamic:
+            if self.colorbar in self.m.controls:
+                self.m.remove_control(self.colorbar)
+            self._show_colorbar(self._da_notransform.sel(y=slice(north, south), x=slice(west, east)))
+            self.l.path = self.url
+            self.m.add_layer(self.l)
+            self.l.redraw()
 
-            self.m.remove_control(self.spinner_control)
+        self.m.remove_control(self.spinner_control)
 
 
     async def async_wait_for_bounds(self):
-        with self.debug_output:
-            if len(self.m.bounds) == 0:
-                await wait_for_change(self.m, 'bounds')
-            self.map_ready = True
+        if len(self.m.bounds) == 0:
+            await wait_for_change(self.m, 'bounds')
+        if self.base_url is None:
+            self.base_url = (await self.url_widget.get_url()).rstrip('/')
+        self.map_ready = True
 
 
     async def async_fit_bounds(self):
-        with self.debug_output:
-            center = self.y_lower + (self.y_upper - self.y_lower) / 2, self.x_left + (self.x_right - self.x_left) / 2
-            if center != self.m.center:
-                self.m.center = center
+        center = self.y_lower + (self.y_upper - self.y_lower) / 2, self.x_left + (self.x_right - self.x_left) / 2
+        if center != self.m.center:
+            self.m.center = center
+            await wait_for_change(self.m, 'bounds')
+        zoomed_out = False
+        # zoom out
+        while True:
+            if self.m.zoom <= 1:
+                break
+            (south, west), (north, east) = self.m.bounds
+            if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
+                self.m.zoom = self.m.zoom - 1
                 await wait_for_change(self.m, 'bounds')
-            zoomed_out = False
-            # zoom out
+                zoomed_out = True
+            else:
+                break
+        if not zoomed_out:
+            # zoom in
             while True:
-                if self.m.zoom <= 1:
-                    break
                 (south, west), (north, east) = self.m.bounds
-                if south > self.y_lower or north < self.y_upper or west > self.x_left or east < self.x_right:
+                if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
+                    self.m.zoom = self.m.zoom + 1
+                    await wait_for_change(self.m, 'bounds')
+                else:
                     self.m.zoom = self.m.zoom - 1
                     await wait_for_change(self.m, 'bounds')
-                    zoomed_out = True
-                else:
                     break
-            if not zoomed_out:
-                # zoom in
-                while True:
-                    (south, west), (north, east) = self.m.bounds
-                    if south < self.y_lower and north > self.y_upper and west < self.x_left and east > self.x_right:
-                        self.m.zoom = self.m.zoom + 1
-                        await wait_for_change(self.m, 'bounds')
-                    else:
-                        self.m.zoom = self.m.zoom - 1
-                        await wait_for_change(self.m, 'bounds')
-                        break
-            self.map_ready = True
+        if self.base_url is None:
+            self.base_url = (await self.url_widget.get_url()).rstrip('/')
+        self.map_ready = True

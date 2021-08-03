@@ -6,4 +6,9 @@ dependencies:
   - tqdm
   - scipy
   - dask
+  - rasterio=1.2.6
+  - jupyterlab=3
   - xarray_leaflet
+  - pip
+  - pip:
+    - ipyurl=0.1.2

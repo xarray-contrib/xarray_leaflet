@@ -203,12 +203,10 @@ class LeafletMap(HasTraits):
             self.dx = float((self.x_right - self.x_left) / (x.size - 1))
             self.dy = float((self.y_upper - self.y_lower) / (y.size - 1))
 
-            if get_base_url is not None:
-                self.base_url = get_base_url(self.m.window_url)
+            if get_base_url is None:
+                self.base_url = None
             else:
-                self.url_widget = Url()
-                display(self.url_widget)
-                self.base_url = self.url_widget.url.rstrip('/') or None
+                self.base_url = get_base_url(self.m.window_url)
 
             if fit_bounds:
                 asyncio.ensure_future(self.async_fit_bounds())
@@ -422,7 +420,9 @@ class LeafletMap(HasTraits):
             if len(self.m.bounds) == 0:
                 await wait_for_change(self.m, 'bounds')
             if self.base_url is None:
-                self.base_url = await self.url_widget.get_url().rstrip('/')
+                self.url_widget = Url()
+                display(self.url_widget)
+                self.base_url = (await self.url_widget.get_url()).rstrip('/')
             self.map_ready = True
 
 
@@ -456,5 +456,7 @@ class LeafletMap(HasTraits):
                         await wait_for_change(self.m, 'bounds')
                         break
             if self.base_url is None:
-                self.base_url = await self.url_widget.get_url().rstrip('/')
+                self.url_widget = Url()
+                display(self.url_widget)
+                self.base_url = (await self.url_widget.get_url()).rstrip('/')
             self.map_ready = True

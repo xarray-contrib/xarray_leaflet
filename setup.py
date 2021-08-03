@@ -22,7 +22,7 @@ requirements = [
     'affine>=2',
     'mercantile>=1',
     'ipyspin>=0.1.1',
-    'ipyurl',
+    'ipyurl>=0.1.2',
 ]
 
 setup_requirements = [ ]

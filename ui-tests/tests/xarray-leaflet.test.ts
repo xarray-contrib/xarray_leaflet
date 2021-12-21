@@ -8,7 +8,7 @@ async function renderMap(fileName: string, page: IJupyterLabPageFixture) {
   await page.notebook.run();
   await page.notebook.waitForRun();
   const maps = await page.$("div.leaflet-container");
-  await new Promise((_) => setTimeout(_, 1000));
+  await new Promise((_) => setTimeout(_, 10000));
   expect(await maps.screenshot()).toMatchSnapshot({
     name: `${fileName}.png`,
   });

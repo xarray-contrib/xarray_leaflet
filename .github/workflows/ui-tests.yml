@@ -43,13 +43,6 @@ jobs:
           cd ui-tests
           jlpm start-jlab &
 
-      - name: Wait for JupyterLab
-        uses: ifaxity/wait-on-action@v1
-        with:
-          resource: http-get://localhost:8888/
-          delay: 10000
-          timeout: 60000
-
       - uses: iterative/setup-cml@v1
       - name: Rendering tests
         run: |

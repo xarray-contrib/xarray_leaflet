@@ -25,6 +25,7 @@ jobs:
 
       - name: Mamba install rasterio
         run: mamba install rasterio
+        shell: bash
 
       - name: Install xarray-leaflet
         run: |
@@ -32,11 +33,13 @@ jobs:
           python -m pip install .
           cd ui-tests
           jlpm install
+        shell: bash
 
       - name: Install browser
         run: |
           cd ui-tests
           jlpm playwright install chromium
+        shell: bash
 
       - name: Launch JupyterLab 
         run: |
@@ -81,8 +84,10 @@ jobs:
           jlpm rimraf "tests/**/*-snapshots/*.png"
           # generate new snapshots
           jlpm run test:update
+        shell: bash
 
       - name: Print JupyterLab logs
         if: always()
         run: |
           cat /tmp/jupyterlab_server.log
+        shell: bash

@@ -42,6 +42,7 @@ jobs:
         run: |
           cd ui-tests
           jlpm start-jlab &
+          sleep 10
           jlpm run test
 
       - name: Upload Playwright Test assets

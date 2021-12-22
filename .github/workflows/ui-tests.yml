@@ -42,14 +42,13 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           cd ui-tests
-          touch ./jupyterlab_server_err.log
-          jlpm start-jlab 2>&1 > ./jupyterlab_server_out.log &
+          jlpm start-jlab 2>&1 > ./jupyterlab_server.log &
 
       - name: Launch JupyterLab on Windows
         if: matrix.os == 'windows-latest'
         run: |
           cd ui-tests
-          Start-Process jlpm -ArgumentList 'start-jlab' -RedirectStandardOutput '.\jupyterlab_server_out.log' -RedirectStandardError '.\jupyterlab_server_err.log'
+          jlpm start-jlab > ./jupyterlab_server.log &
 
       - name: Rendering tests
         run: |
@@ -85,5 +84,4 @@ jobs:
       - name: Print JupyterLab logs
         if: always()
         run: |
-          cat ui-tests/jupyterlab_server_out.log
-          cat ui-tests/jupyterlab_server_err.log
+          cat ui-tests/jupyterlab_server.log

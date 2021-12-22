@@ -2,7 +2,7 @@ import { galata, IJupyterLabPageFixture, test } from "@jupyterlab/galata";
 import { expect } from "@playwright/test";
 
 async function renderMap(fileName: string, page: IJupyterLabPageFixture) {
-  const fullName = `./${fileName}.ipynb`;
+  const fullName = `${fileName}.ipynb`;
   await page.notebook.openByPath(fullName);
   await page.notebook.activate(fullName);
   await page.notebook.run();

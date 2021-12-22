@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
       fail-fast: false
 
     steps:
@@ -41,13 +41,14 @@ jobs:
       - name: Launch JupyterLab
         run: |
           cd ui-tests
-          jupyter lab --config ./jupyter_server_config.py
+          jlpm start-jlab &
 
       - name: Wait for JupyterLab
         uses: ifaxity/wait-on-action@v1
         with:
           resource: http-get://localhost:8888/
-          timeout: 360000
+          delay: 10000
+          timeout: 60000
 
       - uses: iterative/setup-cml@v1
       - name: Rendering tests

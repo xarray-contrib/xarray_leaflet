@@ -48,7 +48,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           cd ui-tests
-          jlpm start-jlab > ./jupyterlab_server.log &
+          jlpm start-jlab 2>&1 > .\jupyterlab_server.log &
 
       - name: Rendering tests
         run: |

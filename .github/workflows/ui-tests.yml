@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [windows-latest]
       fail-fast: false
 
     steps:
@@ -25,7 +25,6 @@ jobs:
 
       - name: Mamba install rasterio
         run: mamba install rasterio
-        shell: bash
 
       - name: Install xarray-leaflet
         run: |
@@ -33,19 +32,16 @@ jobs:
           python -m pip install .
           cd ui-tests
           jlpm install
-        shell: bash
 
       - name: Install browser
         run: |
           cd ui-tests
           jlpm playwright install chromium
-        shell: bash
 
       - name: Launch JupyterLab 
         run: |
           cd ui-tests
-          jlpm start-jlab:detached 2>&1 > /tmp/jupyterlab_server.log &
-        shell: bash
+          jlpm start-jlab:detached_win 2>&1 > /tmp/jupyterlab_server.log &
 
       - name: Wait for JupyterLab
         uses: ifaxity/wait-on-action@v1
@@ -55,7 +51,6 @@ jobs:
 
       - uses: iterative/setup-cml@v1
       - name: Rendering tests
-        shell: bash
         run: |
           cd ui-tests
           jlpm run test
@@ -84,10 +79,3 @@ jobs:
           jlpm rimraf "tests/**/*-snapshots/*.png"
           # generate new snapshots
           jlpm run test:update
-        shell: bash
-
-      - name: Print JupyterLab logs
-        if: always()
-        run: |
-          cat /tmp/jupyterlab_server.log
-        shell: bash

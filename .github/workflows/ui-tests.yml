@@ -38,17 +38,10 @@ jobs:
           cd ui-tests
           jlpm playwright install chromium
 
-      - name: Launch JupyterLab on Linux and MacOS
-        if: matrix.os != 'windows-latest'
+      - name: Launch JupyterLab
         run: |
           cd ui-tests
-          jlpm start-jlab:detached
-
-      - name: Launch JupyterLab on Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          cd ui-tests
-          jlpm start-jlab:detached_win
+          jlpm start-jlab &
 
       - name: Wait for JupyterLab
         uses: ifaxity/wait-on-action@v1

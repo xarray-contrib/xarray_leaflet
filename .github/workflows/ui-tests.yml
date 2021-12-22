@@ -38,15 +38,10 @@ jobs:
           cd ui-tests
           jlpm playwright install chromium
 
-      - name: Launch JupyterLab
+      - name: Launch JupyterLab and run tests
         run: |
           cd ui-tests
           jlpm start-jlab &
-
-      - uses: iterative/setup-cml@v1
-      - name: Rendering tests
-        run: |
-          cd ui-tests
           jlpm run test
 
       - name: Upload Playwright Test assets

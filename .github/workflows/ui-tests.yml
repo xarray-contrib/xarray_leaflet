@@ -38,10 +38,14 @@ jobs:
           cd ui-tests
           jlpm playwright install chromium
 
-      - name: Launch JupyterLab and run tests
+      - name: Launch JupyterLab
         run: |
           cd ui-tests
           jlpm start-jlab &
+
+      - name: Rendering tests
+        run: |
+          cd ui-tests
           sleep 10
           jlpm run test
 

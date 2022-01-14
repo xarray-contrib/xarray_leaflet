@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import mercantile
-from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
+from ipyleaflet import LocalTileLayer, TileLayer, WidgetControl, DrawControl
 from ipyspin import Spinner
 from ipywidgets import Output
 from ipyurl import Url
@@ -18,6 +18,10 @@ from rasterio.warp import Resampling
 from .transform import passthrough, normalize, coarsen
 from .utils import reproject_custom, reproject_not_custom, write_image, get_bbox_tiles, get_transform, wait_for_change
 
+from loguru import logger
+logger.add(r"C:\Users\rwilson3\Documents\code\log.log")
+
+logger.debug("File imported")
 
 @xr.register_dataarray_accessor('leaflet')
 class LeafletMap(HasTraits):
@@ -28,6 +32,7 @@ class LeafletMap(HasTraits):
 
     @observe('map_ready')
     def _map_ready_changed(self, change):
+        logger.debug("Map ready")
         self._start()
 
 
@@ -209,7 +214,7 @@ class LeafletMap(HasTraits):
         else:
             asyncio.ensure_future(self.async_wait_for_bounds())
 
-        self.l = LocalTileLayer()
+        self.l = TileLayer()
         if self._da.name is not None:
             self.l.name = self._da.name
 
@@ -225,6 +230,7 @@ class LeafletMap(HasTraits):
         self.spinner.layout.width = '30px'
         self.spinner_control = WidgetControl(widget=self.spinner, position='bottomright')
 
+        # self._start()
         return self.l
 
 
@@ -264,6 +270,7 @@ class LeafletMap(HasTraits):
 
 
     def _start(self):
+        logger.debug("In _start")
         self.m.add_control(self.spinner_control)
         self._da, self.transform0_args = get_transform(self.transform0(self._da))
 
@@ -272,14 +279,16 @@ class LeafletMap(HasTraits):
             self.tile_path = self.tile_temp_dir.name
         else:
             self.tile_path = self.tile_dir
-        self.url = self.base_url + '/xarray_leaflet' + self.tile_path + '/{z}/{x}/{y}.png'
-        self.l.path = self.url
+        # self.url = "http://localhost:8888" + '/xarray_leaflet/' + self.tile_path + '/{z}/{x}/{y}.png'
+        self.url = self.base_url + '/xarray_leaflet/' + self.tile_path + '/{z}/{x}/{y}.png'
+        self.l.url = self.url
 
         self.m.remove_control(self.spinner_control)
         self._get_tiles()
         self.m.observe(self._get_tiles, names='pixel_bounds')
         if not self.dynamic:
             self._show_colorbar(self._da_notransform)
+            logger.debug(f"Adding layer {self.l}")
             self.m.add_layer(self.l)
 
 
@@ -298,8 +307,8 @@ class LeafletMap(HasTraits):
                 with output:
                     display(Image(filename=f.name))
             finally:
-                os.unlink(f.name)
                 f.close()
+                os.unlink(f.name)
             self.colorbar = WidgetControl(widget=output, position=self.colorbar_position, transparent_bg=True)
             self.m.add_control(self.colorbar)
             plt.close()
@@ -399,7 +408,7 @@ class LeafletMap(HasTraits):
             if self.colorbar in self.m.controls:
                 self.m.remove_control(self.colorbar)
             self._show_colorbar(self._da_notransform.sel(y=slice(north, south), x=slice(west, east)))
-            self.l.path = self.url
+            self.l.url = self.url
             self.m.add_layer(self.l)
             self.l.redraw()
 
@@ -409,8 +418,8 @@ class LeafletMap(HasTraits):
     async def async_wait_for_bounds(self):
         if len(self.m.bounds) == 0:
             await wait_for_change(self.m, 'bounds')
-        if self.base_url is None:
-            self.base_url = (await self.url_widget.get_url()).rstrip('/')
+        # if self.base_url is None:
+        #     self.base_url = (await self.url_widget.get_url()).rstrip('/')
         self.map_ready = True
 
 
@@ -442,6 +451,6 @@ class LeafletMap(HasTraits):
                     self.m.zoom = self.m.zoom - 1
                     await wait_for_change(self.m, 'bounds')
                     break
-        if self.base_url is None:
-            self.base_url = (await self.url_widget.get_url()).rstrip('/')
+        # if self.base_url is None:
+        #     self.base_url = (await self.url_widget.get_url()).rstrip('/')
         self.map_ready = True

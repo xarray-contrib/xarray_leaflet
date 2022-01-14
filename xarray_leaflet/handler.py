@@ -3,6 +3,9 @@ from asyncio import sleep
 from jupyter_server.base.handlers import JupyterHandler
 import tornado
 
+from loguru import logger
+logger.add(r"C:\Users\rwilson3\Documents\code\serverlog.log")
+
 class XarrayLeafletHandler(JupyterHandler):
 
     def set_default_headers(self):
@@ -11,7 +14,8 @@ class XarrayLeafletHandler(JupyterHandler):
 
     @tornado.web.authenticated
     async def get(self, path):
-        path = '/' + path
+        logger.debug(f"In get - path = {path}")
+        # path = '/' + path
         path_done = path[:-4] + '.done'
         delete = False
         timeout = False

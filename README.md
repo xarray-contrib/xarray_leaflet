@@ -1,4 +1,4 @@
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/davidbrochart/xarray_leaflet/master?urlpath=lab%2Ftree%2Fexamples%2Fintroduction.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/davidbrochart/xarray_leaflet/main?urlpath=lab%2Ftree%2Fexamples%2Fintroduction.ipynb)
 [![Build Status](https://github.com/davidbrochart/xarray_leaflet/workflows/UI%20Tests/badge.svg)](https://github.com/davidbrochart/xarray_leaflet/actions)
 
 # xarray-leaflet: an xarray extension for tiled map plotting

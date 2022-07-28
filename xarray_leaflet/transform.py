@@ -1,6 +1,6 @@
 import warnings
 import numpy as np
-import xarray as xr
+import xarray.core.rolling
 
 
 def passthrough(array, *args, **kwargs):
@@ -14,7 +14,7 @@ def normalize(array, *args, **kwargs):
     return array
 
 
-def coarsen(agg_func=xr.core.rolling.DataArrayCoarsen.mean):
+def coarsen(agg_func=xarray.core.rolling.DataArrayCoarsen.mean):
     def _(array, *args, **kwargs):
         tile_width = kwargs['tile_width']
         tile_height = kwargs['tile_height']

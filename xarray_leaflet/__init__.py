@@ -1,11 +1,9 @@
-"""Top-level package for xarray-leaflet."""
+__version__ = "0.1.16"
 
-__author__ = """David Brochart"""
-__email__ = 'david.brochart@gmail.com'
-__version__ = '0.1.16'
-
-from .xarray_leaflet import LeafletMap
-from .server_extension import _jupyter_server_extension_paths, _load_jupyter_server_extension, _jupyter_nbextension_paths
+from .xarray_leaflet import LeafletMap  # noqa
+from .server_extension import _jupyter_server_extension_paths  # noqa
+from .server_extension import _load_jupyter_server_extension
+from .server_extension import _jupyter_nbextension_paths  # noqa
 
 
 load_jupyter_server_extension = _load_jupyter_server_extension

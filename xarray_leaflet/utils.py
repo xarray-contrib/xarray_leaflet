@@ -6,19 +6,25 @@ import mercantile
 from affine import Affine
 
 
-def reproject_custom(source, dst_crs, x0, y0, z, x_res, y_res, width, height, resampling):
+def reproject_custom(
+    source, dst_crs, x0, y0, z, x_res, y_res, width, height, resampling
+):
     a = x_res
     b = 0
-    c = (x0 - 2 ** z) * width * x_res
+    c = (x0 - 2**z) * width * x_res
     d = 0
     e = -y_res
-    f = (2 ** z - y0) * height * y_res
+    f = (2**z - y0) * height * y_res
     dst_affine = Affine(a, b, c, d, e, f)
-    destination = source.rio.reproject(dst_crs, transform=dst_affine, shape=(height, width), resampling=resampling)
+    destination = source.rio.reproject(
+        dst_crs, transform=dst_affine, shape=(height, width), resampling=resampling
+    )
     return destination
 
 
-def reproject_not_custom(source, dst_crs, x0, y0, x_res, y_res, width, height, resampling):
+def reproject_not_custom(
+    source, dst_crs, x0, y0, x_res, y_res, width, height, resampling
+):
     a = x_res
     b = 0
     c = x0
@@ -26,14 +32,16 @@ def reproject_not_custom(source, dst_crs, x0, y0, x_res, y_res, width, height, r
     e = -y_res
     f = y0
     dst_affine = Affine(a, b, c, d, e, f)
-    destination = source.rio.reproject(dst_crs, transform=dst_affine, shape=(height, width), resampling=resampling)
+    destination = source.rio.reproject(
+        dst_crs, transform=dst_affine, shape=(height, width), resampling=resampling
+    )
     return destination
 
 
 def write_image(path, data, persist):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if data is None:
-        open(path, 'wb').close()
+        open(path, "wb").close()
     else:
         im = Image.fromarray(np.uint8(data))
         im.save(path)
@@ -41,16 +49,16 @@ def write_image(path, data, persist):
 
 
 def write_done_file(png_path, persist):
-    with open(png_path[:-4] + '.done', 'wt') as f:
+    with open(png_path[:-4] + ".done", "wt") as f:
         if persist:
-            f.write('keep')
+            f.write("keep")
         else:
-            f.write('delete')
+            f.write("delete")
 
 
 def get_bbox_tiles(tiles):
-    north = east = -float('inf')
-    south = west = float('inf')
+    north = east = -float("inf")
+    south = west = float("inf")
     for tile in tiles:
         bbox = mercantile.bounds(tile)
         north = max(north, bbox.north)
@@ -72,8 +80,15 @@ def get_transform(result):
 
 def wait_for_change(widget, value):
     future = asyncio.Future()
+
     def get_value(change):
         future.set_result(change.new)
         widget.unobserve(get_value, value)
+
     widget.observe(get_value, value)
     return future
+
+
+def debug(message: str):
+    with open("debug.txt", "a") as f:
+        f.write(f"{message}\n")

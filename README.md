@@ -32,6 +32,15 @@ Using pip:
 pip install xarray_leaflet
 ```
 
+For development:
+
+```bash
+pip install -e .
+# manually copy these files in your environment, e.g.:
+# cp etc/jupyter/jupyter_notebook_config.d/* ~/mambaforge/envs/xarray_leaflet/etc/jupyter/jupyter_notebook_config.d/
+# cp etc/jupyter/jupyter_server_config.d/* ~/mambaforge/envs/xarray_leaflet/etc/jupyter/jupyter_server_config.d/
+```
+
 ## Using xarray-leaflet with Voila
 
 To work with xarray-leaflet, Voila has to be launched with the following command:

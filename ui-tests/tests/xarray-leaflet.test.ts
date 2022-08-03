@@ -15,7 +15,8 @@ async function renderMap(fileName: string, page: IJupyterLabPageFixture) {
 }
 
 const notebookList = [
-  "test0",
+  "test_raster",
+  "test_vector",
 ];
 
 test.describe("xarray-leaflet Visual Regression", () => {

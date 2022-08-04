@@ -7,6 +7,7 @@ import geopandas as gpd
 import matplotlib as mpl
 import mercantile
 import numpy as np
+import pandas as pd
 import xarray as xr
 from ipyleaflet import DrawControl, LocalTileLayer, WidgetControl
 from ipyspin import Spinner
@@ -30,20 +31,15 @@ from .utils import (
 from .vector import Zvect
 
 
-@xr.register_dataarray_accessor("leaflet")
-class LeafletMap(HasTraits):
-    """A xarray.DataArray extension for tiled map plotting, based on (ipy)leaflet."""
+class Leaflet(HasTraits):
+
+    is_vector: bool
 
     map_ready = Bool(False)
 
     @observe("map_ready")
     def _map_ready_changed(self, change):
         self._start()
-
-    def __init__(self, da: xr.DataArray = None, df: gpd.GeoDataFrame = None):
-        self._da = da
-        self._df = df
-        self._da_selected = None
 
     def plot(
         self,
@@ -127,14 +123,7 @@ class LeafletMap(HasTraits):
 
         self.layer = LocalTileLayer()
 
-        source_nb = sum([0 if i is None else 1 for i in (self._da, self._df)])
-        if source_nb == 0:
-            raise RuntimeError("No DataArray or GeoDataFrame provided")
-
-        if source_nb > 1:
-            raise RuntimeError("Only one of DataArray or GeoDataFrame must be provided")
-
-        if self._df is not None:
+        if self.is_vector:
             # source is a GeoDataFrame (vector)
             if measurement is None:
                 raise RuntimeError("You must provide a 'measurement'.")
@@ -146,7 +135,7 @@ class LeafletMap(HasTraits):
             )
             if colormap is None:
                 colormap = plt.cm.viridis
-        elif self._da is not None:
+        else:
             # source is a DataArray (raster)
             if "proj4def" in m.crs:
                 # it's a custom projection
@@ -252,7 +241,7 @@ class LeafletMap(HasTraits):
         else:
             self.base_url = get_base_url(self.m.window_url)
 
-        if fit_bounds and self._da is not None:
+        if fit_bounds and not self.is_vector:
             asyncio.ensure_future(self.async_fit_bounds())
         else:
             asyncio.ensure_future(self.async_wait_for_bounds())
@@ -302,7 +291,7 @@ class LeafletMap(HasTraits):
 
     def _start(self):
         self.m.add_control(self.spinner_control)
-        if self._da is not None:
+        if not self.is_vector:
             self._da, self.transform0_args = get_transform(self.transform0(self._da))
         else:
             self.layer.name = self.measurement
@@ -318,14 +307,16 @@ class LeafletMap(HasTraits):
         self.layer.path = self.url
 
         self.m.remove_control(self.spinner_control)
-        if self._da is not None:
+        if not self.is_vector:
             get_tiles = self._get_raster_tiles
-        else:
+        elif self._df is not None:
             get_tiles = self._get_vector_tiles
+        else:
+            raise RuntimeError("No DataArray or GeoDataFrame provided.")
         get_tiles()
         self.m.observe(get_tiles, names="pixel_bounds")
         if not self.dynamic:
-            if self._da is not None:
+            if not self.is_vector:
                 self._show_colorbar(self._da_notransform)
             self.m.add_layer(self.layer)
 
@@ -603,3 +594,22 @@ class LeafletMap(HasTraits):
         if self.base_url is None:
             self.base_url = (await self.url_widget.get_url()).rstrip("/")
         self.map_ready = True
+
+
+@xr.register_dataarray_accessor("leaflet")
+class DataArrayLeaflet(Leaflet):
+    """A DataArraye extension for tiled map plotting, based on (ipy)leaflet."""
+
+    def __init__(self, da: xr.DataArray = None):
+        self._da = da
+        self._da_selected = None
+        self.is_vector = False
+
+
+@pd.api.extensions.register_dataframe_accessor("leaflet")
+class GeoDataFrameLeaflet(Leaflet):
+    """A GeoDataFrame extension for tiled map plotting, based on (ipy)leaflet."""
+
+    def __init__(self, df: gpd.GeoDataFrame = None):
+        self._df = df
+        self.is_vector = True

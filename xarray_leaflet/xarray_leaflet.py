@@ -1,33 +1,33 @@
-import os
 import asyncio
+import os
 import tempfile
 from typing import Optional
 
-import xarray as xr
 import geopandas as gpd
 import matplotlib as mpl
-import numpy as np
 import mercantile
-from matplotlib import pyplot as plt
-from ipyleaflet import LocalTileLayer, WidgetControl, DrawControl
+import numpy as np
+import xarray as xr
+from ipyleaflet import DrawControl, LocalTileLayer, WidgetControl
 from ipyspin import Spinner
-from ipywidgets import Output
+from IPython.display import Image, display
 from ipyurl import Url
-from IPython.display import display, Image
-from traitlets import HasTraits, Bool, observe
+from ipywidgets import Output
+from matplotlib import pyplot as plt
 from rasterio.warp import Resampling
+from traitlets import Bool, HasTraits, observe
 
-from .vector import Zvect
-from .transform import passthrough, normalize, coarsen
+from .transform import coarsen, normalize, passthrough
+from .utils import debug  # noqa
 from .utils import (
-    reproject_custom,
-    reproject_not_custom,
-    write_image,
     get_bbox_tiles,
     get_transform,
+    reproject_custom,
+    reproject_not_custom,
     wait_for_change,
+    write_image,
 )
-from .utils import debug  # noqa
+from .vector import Zvect
 
 
 @xr.register_dataarray_accessor("leaflet")

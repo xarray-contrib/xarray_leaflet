@@ -42,6 +42,7 @@ jobs:
     - name: Check style
       run: |
         black --check xarray_leaflet tests
+        isort --check --profile=black xarray_leaflet tests
         flake8 xarray_leaflet tests
         # mypy xarray_leaflet
 

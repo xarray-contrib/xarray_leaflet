@@ -1,9 +1,10 @@
-import os
 import asyncio
-import numpy as np
-from PIL import Image
+import os
+
 import mercantile
+import numpy as np
 from affine import Affine
+from PIL import Image
 
 
 def reproject_custom(

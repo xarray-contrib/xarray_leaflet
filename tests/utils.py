@@ -2,7 +2,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-
 RESULTS = Path(__file__).parent / "results"
 RESULTS.mkdir(exist_ok=True)
 EXPECTED = Path(__file__).parent / "expected"

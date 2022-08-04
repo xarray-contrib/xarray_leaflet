@@ -4,10 +4,10 @@ from tempfile import TemporaryDirectory
 import geopandas as gpd
 import mercantile
 from shapely.geometry import box
+
 from xarray_leaflet.vector import Zvect
 
 from .utils import save_fig
-
 
 HEIGHT = WIDTH = 256
 

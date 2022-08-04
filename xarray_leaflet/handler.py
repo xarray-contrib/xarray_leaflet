@@ -1,7 +1,8 @@
 import os
 from asyncio import sleep
-from jupyter_server.base.handlers import JupyterHandler
+
 import tornado
+from jupyter_server.base.handlers import JupyterHandler
 
 
 class XarrayLeafletHandler(JupyterHandler):

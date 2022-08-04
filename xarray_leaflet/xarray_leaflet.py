@@ -1,7 +1,7 @@
 import asyncio
 import os
 import tempfile
-from typing import Optional
+from typing import Callable, Optional
 
 import geopandas as gpd
 import matplotlib as mpl
@@ -62,6 +62,7 @@ class Leaflet(HasTraits):
         resampling=Resampling.nearest,
         get_base_url=None,
         measurement: Optional[str] = None,
+        visible_callback: Optional[Callable] = None,
     ):
         """Display an array as an interactive map.
 
@@ -114,6 +115,13 @@ class Leaflet(HasTraits):
             A function taking the window URL and returning the base URL to use.
         measurement: str, optional
             The geocube measurement.
+        visible_callback: callable, optional
+            A callable taking the following arguments:
+            - the ipyleaflet.Map
+            - the xarray.DataArray of the visible region
+            - the mercantile.LngLatBbox of the visible region
+
+            and returning True if the layer should be shown, False otherwise.
 
         Returns
         -------
@@ -125,6 +133,7 @@ class Leaflet(HasTraits):
 
         if self.is_vector:
             # source is a GeoDataFrame (vector)
+            self.visible_callback = visible_callback
             if measurement is None:
                 raise RuntimeError("You must provide a 'measurement'.")
             self.measurement = measurement
@@ -365,6 +374,12 @@ class Leaflet(HasTraits):
         if self.dynamic:
             llbbox = mercantile.LngLatBbox(west, south, east, north)
             da_visible = self.zvect.get_da_llbbox(llbbox, z)
+            # check if we must show the layer
+            if self.visible_callback and not self.visible_callback(
+                self.m, da_visible, llbbox
+            ):
+                self.m.remove_control(self.spinner_control)
+                return
             if da_visible is None:
                 self.max_value = 0
             else:
@@ -600,7 +615,7 @@ class Leaflet(HasTraits):
 class DataArrayLeaflet(Leaflet):
     """A DataArraye extension for tiled map plotting, based on (ipy)leaflet."""
 
-    def __init__(self, da: xr.DataArray = None):
+    def __init__(self, da: xr.DataArray):
         self._da = da
         self._da_selected = None
         self.is_vector = False
@@ -610,6 +625,6 @@ class DataArrayLeaflet(Leaflet):
 class GeoDataFrameLeaflet(Leaflet):
     """A GeoDataFrame extension for tiled map plotting, based on (ipy)leaflet."""
 
-    def __init__(self, df: gpd.GeoDataFrame = None):
+    def __init__(self, df: gpd.GeoDataFrame):
         self._df = df
         self.is_vector = True

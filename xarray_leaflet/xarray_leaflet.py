@@ -311,7 +311,7 @@ class Leaflet(HasTraits):
         else:
             self.tile_path = self.tile_dir
         self.url = (
-            self.base_url + "/xarray_leaflet" + self.tile_path + "/{z}/{x}/{y}.png"
+            self.base_url + "/xarray_leaflet/" + self.tile_path + "/{z}/{x}/{y}.png"
         )
         self.layer.path = self.url
 
@@ -361,7 +361,7 @@ class Leaflet(HasTraits):
             self.tile_temp_dir = tempfile.TemporaryDirectory(prefix="xarray_leaflet_")
             new_tile_path = self.tile_temp_dir.name
             new_url = (
-                self.base_url + "/xarray_leaflet" + new_tile_path + "/{z}/{x}/{y}.png"
+                self.base_url + "/xarray_leaflet/" + new_tile_path + "/{z}/{x}/{y}.png"
             )
             if self.layer in self.m.layers:
                 self.m.remove_layer(self.layer)
@@ -421,7 +421,7 @@ class Leaflet(HasTraits):
             self.tile_temp_dir = tempfile.TemporaryDirectory(prefix="xarray_leaflet_")
             new_tile_path = self.tile_temp_dir.name
             new_url = (
-                self.base_url + "/xarray_leaflet" + new_tile_path + "/{z}/{x}/{y}.png"
+                self.base_url + "/xarray_leaflet/" + new_tile_path + "/{z}/{x}/{y}.png"
             )
             if self.layer in self.m.layers:
                 self.m.remove_layer(self.layer)

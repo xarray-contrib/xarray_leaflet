@@ -327,7 +327,7 @@ class Leaflet(HasTraits):
         if not self.dynamic:
             if not self.is_vector:
                 self._show_colorbar(self._da_notransform)
-            self.m.add_layer(self.layer)
+        self.m.add_layer(self.layer)
 
     def _show_colorbar(self, da):
         if self.colorbar_position and self.colormap is not None:
@@ -356,15 +356,6 @@ class Leaflet(HasTraits):
 
     def _get_vector_tiles(self, change=None):
         self.m.add_control(self.spinner_control)
-        if self.dynamic:
-            self.tile_temp_dir.cleanup()
-            self.tile_temp_dir = tempfile.TemporaryDirectory(prefix="xarray_leaflet_")
-            new_tile_path = self.tile_temp_dir.name
-            new_url = (
-                self.base_url + "/xarray_leaflet/" + new_tile_path + "/{z}/{x}/{y}.png"
-            )
-            if self.layer in self.m.layers:
-                self.m.remove_layer(self.layer)
 
         # visible bounds
         (south, west), (north, east) = self.m.bounds
@@ -385,9 +376,6 @@ class Leaflet(HasTraits):
             else:
                 self.max_value = da_visible.max()
 
-            self.tile_path = new_tile_path
-            self.url = new_url
-
         for tile in tiles:
             x, y, z = tile
             path = f"{self.tile_path}/{z}/{x}/{y}.png"
@@ -402,29 +390,18 @@ class Leaflet(HasTraits):
                     else:
                         da_tile = None
                 if da_tile is None:
-                    write_image(path, None, self.persist)
+                    write_image(path, None)
                 else:
                     da_tile /= self.max_value
                     da_tile = self.colormap(da_tile)
-                    write_image(path, da_tile * 255, self.persist)
+                    write_image(path, da_tile * 255)
 
         if self.dynamic:
-            self.layer.path = self.url
-            self.m.add_layer(self.layer)
             self.layer.redraw()
         self.m.remove_control(self.spinner_control)
 
     def _get_raster_tiles(self, change=None):
         self.m.add_control(self.spinner_control)
-        if self.dynamic:
-            self.tile_temp_dir.cleanup()
-            self.tile_temp_dir = tempfile.TemporaryDirectory(prefix="xarray_leaflet_")
-            new_tile_path = self.tile_temp_dir.name
-            new_url = (
-                self.base_url + "/xarray_leaflet/" + new_tile_path + "/{z}/{x}/{y}.png"
-            )
-            if self.layer in self.m.layers:
-                self.m.remove_layer(self.layer)
 
         (left, top), (right, bottom) = self.m.pixel_bounds
         (south, west), (north, east) = self.m.bounds
@@ -466,10 +443,6 @@ class Leaflet(HasTraits):
                 self.transform1(da_visible, *self.transform0_args)
             )
 
-        if self.dynamic:
-            self.tile_path = new_tile_path
-            self.url = new_url
-
         for tile in tiles:
             x, y, z = tile
             path = f"{self.tile_path}/{z}/{x}/{y}.png"
@@ -490,7 +463,7 @@ class Leaflet(HasTraits):
                     da_tile = da_visible
                 # check if we have data for this tile
                 if 0 in da_tile.shape:
-                    write_image(path, None, self.persist)
+                    write_image(path, None)
                 else:
                     da_tile.attrs = self.attrs
                     da_tile, transform2_args = get_transform(
@@ -541,10 +514,10 @@ class Leaflet(HasTraits):
                         alpha = np.where(das[0] == self._da.rio.nodata, 0, 255)
                         das.append(alpha)
                         da_tile = np.stack(das, axis=2)
-                        write_image(path, da_tile, self.persist)
+                        write_image(path, da_tile)
                     else:
                         da_tile = self.colormap(das[0])
-                        write_image(path, da_tile * 255, self.persist)
+                        write_image(path, da_tile * 255)
 
         if self.dynamic:
             if self.colorbar in self.m.controls:
@@ -552,8 +525,6 @@ class Leaflet(HasTraits):
             self._show_colorbar(
                 self._da_notransform.sel(y=slice(north, south), x=slice(west, east))
             )
-            self.layer.path = self.url
-            self.m.add_layer(self.layer)
             self.layer.redraw()
 
         self.m.remove_control(self.spinner_control)

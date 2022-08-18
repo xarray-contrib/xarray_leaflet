@@ -39,22 +39,18 @@ def reproject_not_custom(
     return destination
 
 
-def write_image(path, data, persist):
+def write_image(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    status_path = path[:-4] + ".status"
+    with open(status_path, "wt") as f:
+        f.write("computing")
     if data is None:
         open(path, "wb").close()
     else:
         im = Image.fromarray(np.uint8(data))
         im.save(path)
-    write_done_file(path, persist)
-
-
-def write_done_file(png_path, persist):
-    with open(png_path[:-4] + ".done", "wt") as f:
-        if persist:
-            f.write("keep")
-        else:
-            f.write("delete")
+    with open(status_path, "wt") as f:
+        f.write("done")
 
 
 def get_bbox_tiles(tiles):

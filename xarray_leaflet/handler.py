@@ -14,19 +14,15 @@ class XarrayLeafletHandler(JupyterHandler):
 
     @tornado.web.authenticated
     async def get(self, path):
-        path_done = path[:-4] + ".done"
-        delete = False
+        status = path[:-4] + ".status"
         timeout = False
         dt = 0.1
         t = 0
         while True:
-            if os.path.exists(path_done):
-                with open(path_done) as f:
+            if os.path.exists(status):
+                with open(status) as f:
                     txt = f.read()
-                if txt.startswith("keep"):
-                    break
-                elif txt.startswith("delete"):
-                    delete = True
+                if txt.startswith("done"):
                     break
             await sleep(dt)
             t += dt
@@ -50,7 +46,6 @@ class XarrayLeafletHandler(JupyterHandler):
         self.set_header(
             "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
         )
+        self.set_header("Pragma", "no-cache")
+        self.set_header("Expires", "0")
         self.finish(tile_png)
-        if delete:
-            os.remove(path_done)
-            os.remove(path)

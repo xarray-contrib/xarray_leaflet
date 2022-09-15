@@ -1,0 +1,55 @@
+name: Update Galata References
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  update-reference-screenshots:
+    name: Update Galata References
+    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, 'update galata references') }}
+    runs-on: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git to use https
+        run: git config --global hub.protocol https
+
+      - name: Checkout the branch from the PR that triggered the job
+        run: hub pr checkout ${{ github.event.issue.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge
+
+      - name: Mamba install dependencies
+        run: mamba install python=${{ matrix.python-version }} pip
+
+      - name: Install xarray_leaflet
+        run: pip install .
+
+      - name: Install ui-tests
+        run: jlpm install --frozen-lockfile
+        working-directory: ui-tests
+
+      - uses: jupyterlab/maintainer-tools/.github/actions/update-snapshots@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          server_url: http-get://localhost:8888/
+          test_folder: ui-tests

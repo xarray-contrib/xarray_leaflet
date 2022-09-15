@@ -1,11 +1,11 @@
 import json
+import math
 from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import mercantile
 import numpy as np
-import pyproj
 import xarray as xr
 import zarr
 from geocube.api.core import make_geocube
@@ -13,7 +13,6 @@ from geocube.rasterize import rasterize_image
 from geopandas import GeoDataFrame
 from rasterio.enums import MergeAlg
 from shapely.geometry import box, mapping
-from shapely.ops import transform
 
 from .utils import debug  # noqa
 
@@ -23,6 +22,7 @@ class Zvect:
         self,
         df: GeoDataFrame,
         measurement: str,
+        rasterize_function: Optional[Callable],
         width: int,
         height: int,
         root_path: str = "",
@@ -30,6 +30,9 @@ class Zvect:
         # reproject to Web Mercator
         self.df = df.to_crs(epsg=3857)
         self.measurement = measurement
+        self.rasterize_function = rasterize_function or partial(
+            rasterize_image, merge_alg=MergeAlg.add, all_touched=True
+        )
         self.width = width
         self.height = height
         self.zzarr = Zzarr(root_path, width, height)
@@ -56,9 +59,7 @@ class Zvect:
             vector_data=df_tile,
             resolution=(-dy, dx),
             measurements=[self.measurement],
-            rasterize_function=partial(
-                rasterize_image, merge_alg=MergeAlg.add, all_touched=True
-            ),
+            rasterize_function=self.rasterize_function,
             fill=0,
             geom=geom,
         )
@@ -82,15 +83,10 @@ class Zvect:
                 self.tiles.append(tile)
         if all_none:
             return None
-        project = pyproj.Transformer.from_crs(
-            pyproj.CRS("EPSG:4326"), pyproj.CRS("EPSG:3857"), always_xy=True
-        ).transform
-        b = box(*bbox)
-        polygon = transform(project, b)
-        left, bottom, right, top = polygon.bounds
-        return self.zzarr.get_ds(z)["da"].sel(
-            x=slice(left, right), y=slice(top, bottom)
-        )
+        da = self.get_da(z)
+        y0, x0 = deg2idx(bbox.north, bbox.west, z, self.height, self.width, math.floor)
+        y1, x1 = deg2idx(bbox.south, bbox.east, z, self.height, self.width, math.ceil)
+        return da[y0:y1, x0:x1]
 
     def get_da(self, z: int) -> xr.DataArray:
         return self.zzarr.get_ds(z)["da"]
@@ -101,7 +97,7 @@ class Zzarr:
         self.root_path = Path(root_path)
         self.width = width
         self.height = height
-        self.ds = {}
+        self.z = None
 
     def open_zarr(self, mode: str, z: int) -> zarr.Array:
         path = self.root_path / str(z)
@@ -114,32 +110,6 @@ class Zzarr:
         )
         if mode == "w":
             # write Dataset to zarr
-            mi, ma = mercantile.minmax(z)
-            ul = mercantile.xy_bounds(mi, mi, z)
-            lr = mercantile.xy_bounds(ma, ma, z)
-            bbox = mercantile.Bbox(ul.left, lr.bottom, lr.right, ul.top)
-            x = zarr.open(
-                path / "x",
-                mode="w",
-                shape=(2**z * self.width,),
-                chunks=(2**z * self.width,),
-                dtype="<f8",
-            )
-            x[:] = np.linspace(bbox.left, bbox.right, 2**z * self.width)
-            x_zattrs = dict(_ARRAY_DIMENSIONS=["x"])
-            (path / "x" / ".zattrs").write_text(json.dumps(x_zattrs))
-            y = zarr.open(
-                path / "y",
-                mode="w",
-                shape=(2**z * self.height,),
-                chunks=(2**z * self.height,),
-                dtype="<f8",
-            )
-            y[:] = np.linspace(bbox.top, bbox.bottom, 2**z * self.height)
-            x_zarray = json.loads((path / "x" / ".zarray").read_text())
-            y_zarray = json.loads((path / "y" / ".zarray").read_text())
-            y_zattrs = dict(_ARRAY_DIMENSIONS=["y"])
-            (path / "y" / ".zattrs").write_text(json.dumps(y_zattrs))
             (path / ".zattrs").write_text(json.dumps(dict()))
             zarray = json.loads((path / "da" / ".zarray").read_text())
             zattrs = dict(_ARRAY_DIMENSIONS=["y", "x"])
@@ -153,10 +123,6 @@ class Zzarr:
                             ".zgroup": zgroup,
                             "da/.zarray": zarray,
                             "da/.zattrs": zattrs,
-                            "x/.zarray": x_zarray,
-                            "x/.zattrs": x_zattrs,
-                            "y/.zarray": y_zarray,
-                            "y/.zattrs": y_zattrs,
                         },
                         zarr_consolidated_format=1,
                     )
@@ -172,14 +138,23 @@ class Zzarr:
             mode = "a"
         else:
             mode = "w"
-        self.array = self.open_zarr(mode, z)
-        self.array[
+        array = self.open_zarr(mode, z)
+        array[
             y * self.height : (y + 1) * self.height,  # noqa
             x * self.width : (x + 1) * self.width,  # noqa
         ] = data
 
     def get_ds(self, z: int) -> xr.Dataset:
         path = self.root_path / str(z)
-        if z not in self.ds:
-            self.ds[z] = xr.open_zarr(path)
-        return self.ds[z]
+        if z != self.z:
+            self.ds_z = xr.open_zarr(path)
+            self.z = z
+        return self.ds_z
+
+
+def deg2idx(lat_deg, lon_deg, zoom, height, width, round_fun):
+    lat_rad = math.radians(lat_deg)
+    n = 2**zoom
+    xtile = round_fun(((lon_deg + 180) % 360) / 360 * n * width)
+    ytile = round_fun((1 - math.asinh(math.tan(lat_rad)) / math.pi) / 2 * n * height)
+    return ytile, xtile

@@ -44,6 +44,16 @@ class Leaflet(HasTraits):
     def plot(
         self,
         m,
+        *,
+        # raster or vector options:
+        get_base_url: Optional[Callable] = None,
+        dynamic: Optional[bool] = None,
+        persist: bool = True,
+        tile_dir=None,
+        tile_height: int = 256,
+        tile_width: int = 256,
+        layer: Callable = LocalTileLayer,
+        # raster-only options:
         x_dim="x",
         y_dim="y",
         fit_bounds=True,
@@ -54,15 +64,11 @@ class Leaflet(HasTraits):
         transform3=passthrough,
         colormap=None,
         colorbar_position="topright",
-        persist=True,
-        dynamic=False,
-        tile_dir=None,
-        tile_height=256,
-        tile_width=256,
         resampling=Resampling.nearest,
-        get_base_url=None,
+        # vector-only options:
         measurement: Optional[str] = None,
         visible_callback: Optional[Callable] = None,
+        rasterize_function: Optional[Callable] = None,
     ):
         """Display an array as an interactive map.
 
@@ -122,6 +128,9 @@ class Leaflet(HasTraits):
             - the mercantile.LngLatBbox of the visible region
 
             and returning True if the layer should be shown, False otherwise.
+        rasterize_function: callable, optional
+            A callable passed to make_geocube. Defaults to:
+            partial(rasterize_image, merge_alg=MergeAlg.add, all_touched=True)
 
         Returns
         -------
@@ -129,23 +138,34 @@ class Leaflet(HasTraits):
             A handler to the layer that is added to the map.
         """
 
-        self.layer = LocalTileLayer()
+        self.layer = layer()
 
         if self.is_vector:
             # source is a GeoDataFrame (vector)
             self.visible_callback = visible_callback
             if measurement is None:
                 raise RuntimeError("You must provide a 'measurement'.")
+            if dynamic is None:
+                dynamic = True
+            if not dynamic:
+                self.vmin = self._df[measurement].min()
+                self.vmax = self._df[measurement].max()
             self.measurement = measurement
-            dynamic = True
             zarr_temp_dir = tempfile.TemporaryDirectory(prefix="xarray_leaflet_zarr_")
             self.zvect = Zvect(
-                self._df, measurement, tile_width, tile_height, zarr_temp_dir.name
+                self._df,
+                measurement,
+                rasterize_function,
+                tile_width,
+                tile_height,
+                zarr_temp_dir.name,
             )
             if colormap is None:
                 colormap = plt.cm.viridis
         else:
             # source is a DataArray (raster)
+            if dynamic is None:
+                dynamic = False
             if "proj4def" in m.crs:
                 # it's a custom projection
                 if dynamic:
@@ -363,6 +383,7 @@ class Leaflet(HasTraits):
         tiles = mercantile.tiles(west, south, east, north, z)
 
         if self.dynamic:
+            # get DataArray for the visible map
             llbbox = mercantile.LngLatBbox(west, south, east, north)
             da_visible = self.zvect.get_da_llbbox(llbbox, z)
             # check if we must show the layer
@@ -372,32 +393,42 @@ class Leaflet(HasTraits):
                 self.m.remove_control(self.spinner_control)
                 return
             if da_visible is None:
-                self.max_value = 0
+                vmin = vmax = 0
             else:
-                self.max_value = da_visible.max()
+                vmin = da_visible.min()
+                vmax = da_visible.max()
+        else:
+            vmin = self.vmin
+            vmax = self.vmax
+            da_visible_computed = False
 
         for tile in tiles:
             x, y, z = tile
             path = f"{self.tile_path}/{z}/{x}/{y}.png"
             if self.dynamic or not os.path.exists(path):
-                xy_bbox = mercantile.xy_bounds(tile)
-                if self.dynamic:
-                    if da_visible is not None:
-                        da_tile = self.zvect.get_da(z).sel(
-                            y=slice(xy_bbox.top, xy_bbox.bottom),
-                            x=slice(xy_bbox.left, xy_bbox.right),
-                        )
-                    else:
-                        da_tile = None
+                if not self.dynamic and not da_visible_computed:
+                    # get DataArray for the visible map
+                    llbbox = mercantile.LngLatBbox(west, south, east, north)
+                    da_visible = self.zvect.get_da_llbbox(llbbox, z)
+                    da_visible_computed = True
+                if self.dynamic and da_visible is None:
+                    da_tile = None
+                else:
+                    da_tile = self.zvect.get_da(z)[
+                        y * self.tile_height : (y + 1) * self.tile_height,  # noqa
+                        x * self.tile_width : (x + 1) * self.tile_width,  # noqa
+                    ]
                 if da_tile is None:
                     write_image(path, None)
                 else:
-                    da_tile /= self.max_value
+                    # normalize
+                    da_tile = (da_tile - vmin) / (vmax - vmin)
                     da_tile = self.colormap(da_tile)
                     write_image(path, da_tile * 255)
 
         if self.dynamic:
             self.layer.redraw()
+
         self.m.remove_control(self.spinner_control)
 
     def _get_raster_tiles(self, change=None):

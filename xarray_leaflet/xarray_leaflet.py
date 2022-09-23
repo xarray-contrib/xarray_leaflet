@@ -411,13 +411,17 @@ class Leaflet(HasTraits):
                     llbbox = mercantile.LngLatBbox(west, south, east, north)
                     da_visible = self.zvect.get_da_llbbox(llbbox, z)
                     da_visible_computed = True
-                if self.dynamic and da_visible is None:
+                if da_visible is None:
                     da_tile = None
                 else:
-                    da_tile = self.zvect.get_da(z)[
-                        y * self.tile_height : (y + 1) * self.tile_height,  # noqa
-                        x * self.tile_width : (x + 1) * self.tile_width,  # noqa
-                    ]
+                    da_tile = self.zvect.get_da(z)
+                    if da_tile is not None:
+                        da_tile = da_tile[
+                            y * self.tile_height : (y + 1) * self.tile_height,  # noqa
+                            x * self.tile_width : (x + 1) * self.tile_width,  # noqa
+                        ]
+                        if np.isnan(da_tile).all():
+                            da_tile = None
                 if da_tile is None:
                     write_image(path, None)
                 else:

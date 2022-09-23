@@ -60,11 +60,12 @@ class Zvect:
             resolution=(-dy, dx),
             measurements=[self.measurement],
             rasterize_function=self.rasterize_function,
-            fill=0,
             geom=geom,
         )
         # remove added pixels
         da_tile = ds_tile[self.measurement][1:-1, 1:-1]
+        if np.isnan(da_tile).all():
+            return None
         return da_tile
 
     def get_da_llbbox(
@@ -84,12 +85,19 @@ class Zvect:
         if all_none:
             return None
         da = self.get_da(z)
+        if da is None:
+            return None
         y0, x0 = deg2idx(bbox.north, bbox.west, z, self.height, self.width, math.floor)
         y1, x1 = deg2idx(bbox.south, bbox.east, z, self.height, self.width, math.ceil)
         return da[y0:y1, x0:x1]
 
-    def get_da(self, z: int) -> xr.DataArray:
-        return self.zzarr.get_ds(z)["da"]
+    def get_da(self, z: int) -> Optional[xr.DataArray]:
+        ds = self.zzarr.get_ds(z)
+        if ds is None:
+            da = None
+        else:
+            da = ds["da"]
+        return da
 
 
 class Zzarr:
@@ -107,6 +115,7 @@ class Zzarr:
             shape=(2**z * self.height, 2**z * self.width),
             chunks=(self.height, self.width),
             dtype="<f8",
+            fill_value=np.nan,
         )
         if mode == "w":
             # write Dataset to zarr
@@ -144,10 +153,13 @@ class Zzarr:
             x * self.width : (x + 1) * self.width,  # noqa
         ] = data
 
-    def get_ds(self, z: int) -> xr.Dataset:
+    def get_ds(self, z: int) -> Optional[xr.Dataset]:
         path = self.root_path / str(z)
         if z != self.z:
-            self.ds_z = xr.open_zarr(path)
+            try:
+                self.ds_z = xr.open_zarr(path)
+            except:
+                return None
             self.z = z
         return self.ds_z
 

@@ -53,6 +53,8 @@ class Leaflet(HasTraits):
         tile_height: int = 256,
         tile_width: int = 256,
         layer: Callable = LocalTileLayer,
+        transform3=passthrough,
+        colormap=None,
         # raster-only options:
         x_dim="x",
         y_dim="y",
@@ -61,8 +63,6 @@ class Leaflet(HasTraits):
         transform0=None,
         transform1=passthrough,
         transform2=coarsen(),
-        transform3=passthrough,
-        colormap=None,
         colorbar_position="topright",
         resampling=Resampling.nearest,
         # vector-only options:
@@ -140,6 +140,11 @@ class Leaflet(HasTraits):
 
         self.layer = layer()
 
+        self.transform0 = transform0
+        self.transform1 = transform1
+        self.transform2 = transform2
+        self.transform3 = transform3
+
         if self.is_vector:
             # source is a GeoDataFrame (vector)
             self.visible_callback = visible_callback
@@ -215,11 +220,6 @@ class Leaflet(HasTraits):
                     transform0 = passthrough
 
             self.attrs = self._da.attrs
-            self.transform0 = transform0
-            self.transform1 = transform1
-            self.transform2 = transform2
-            self.transform3 = transform3
-
             self._da = self._da.rename({y_dim: "y", x_dim: "x"})
             if rgb_dim is None:
                 self.is_rgb = False
@@ -425,6 +425,7 @@ class Leaflet(HasTraits):
                 if da_tile is None:
                     write_image(path, None)
                 else:
+                    da_tile = self.transform3(da_tile)
                     # normalize
                     da_tile = (da_tile - vmin) / (vmax - vmin)
                     da_tile = self.colormap(da_tile)

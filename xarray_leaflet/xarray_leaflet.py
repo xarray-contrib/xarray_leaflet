@@ -23,6 +23,7 @@ from .utils import debug  # noqa
 from .utils import (
     get_bbox_tiles,
     get_transform,
+    lng_to_180,
     reproject_custom,
     reproject_not_custom,
     wait_for_change,
@@ -379,6 +380,9 @@ class Leaflet(HasTraits):
 
         # visible bounds
         (south, west), (north, east) = self.m.bounds
+        west = lng_to_180(west)
+        east = lng_to_180(east)
+
         z = int(self.m.zoom)
         tiles = mercantile.tiles(west, south, east, north, z)
 
@@ -441,6 +445,8 @@ class Leaflet(HasTraits):
 
         (left, top), (right, bottom) = self.m.pixel_bounds
         (south, west), (north, east) = self.m.bounds
+        west = lng_to_180(west)
+        east = lng_to_180(east)
         z = int(self.m.zoom)  # TODO: support non-integer zoom levels?
         if self.custom_proj:
             resolution = self.m.crs["resolutions"][z]

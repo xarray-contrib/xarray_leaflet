@@ -86,6 +86,15 @@ def wait_for_change(widget, value):
     return future
 
 
+def lng_to_180(lng: float) -> float:
+    lng1 = lng + 180
+    lng2 = lng1 % 360
+    if lng1 < 0:
+        lng2 = 360 - lng2
+    lng2 -= 180
+    return lng2
+
+
 def debug(message: str):
     with open("debug.txt", "a") as f:
         f.write(f"{message}\n")

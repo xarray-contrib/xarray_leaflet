@@ -1,4 +1,5 @@
 import warnings
+
 import numpy as np
 import xarray.core.rolling
 
@@ -16,8 +17,8 @@ def normalize(array, *args, **kwargs):
 
 def coarsen(agg_func=xarray.core.rolling.DataArrayCoarsen.mean):
     def _(array, *args, **kwargs):
-        tile_width = kwargs['tile_width']
-        tile_height = kwargs['tile_height']
+        tile_width = kwargs["tile_width"]
+        tile_height = kwargs["tile_height"]
         if len(array.shape) > 2:
             # it's an RGB array
             array_2d = array.isel(rgb=0)
@@ -28,13 +29,14 @@ def coarsen(agg_func=xarray.core.rolling.DataArrayCoarsen.mean):
         wy = ny // (tile_height * 2)
         dim = {}
         if wx > 1:
-            dim['x'] = wx
+            dim["x"] = wx
         if wy > 1:
-            dim['y'] = wy
-        array = array.coarsen(**dim, boundary='pad')
+            dim["y"] = wy
+        array = array.coarsen(**dim, boundary="pad")
         # ignore "mean of empty slice" warning in np.nanmean
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             array = agg_func(array)
         return array
+
     return _

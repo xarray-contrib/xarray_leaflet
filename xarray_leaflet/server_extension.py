@@ -1,5 +1,6 @@
-from .handler import XarrayLeafletHandler
 from notebook.utils import url_path_join
+
+from .handler import XarrayLeafletHandler
 
 
 def _load_jupyter_server_extension(serverapp):
@@ -8,19 +9,20 @@ def _load_jupyter_server_extension(serverapp):
     """
 
     web_app = serverapp.web_app
-    host_pattern = '.*$'
-    route_pattern = url_path_join(web_app.settings['base_url'], '/xarray_leaflet/(.*)')
+    host_pattern = ".*$"
+    route_pattern = url_path_join(web_app.settings["base_url"], "/xarray_leaflet/(.*)")
     web_app.add_handlers(host_pattern, [(route_pattern, XarrayLeafletHandler)])
 
 
-
-
 def _jupyter_nbextension_paths():
-    return [dict(
-        section="notebook",
-        src="static",
-        dest="xarray_leaflet",
-        require="xarray_leaflet/extension")]
+    return [
+        dict(
+            section="notebook",
+            src="static",
+            dest="xarray_leaflet",
+            require="xarray_leaflet/extension",
+        )
+    ]
 
 
 def _jupyter_server_extension_paths():
@@ -28,8 +30,4 @@ def _jupyter_server_extension_paths():
     Returns a list of dictionaries with metadata describing
     where to find the `_load_jupyter_server_extension` function.
     """
-    return [
-        {
-            "module": "xarray_leaflet"
-        }
-    ]
+    return [{"module": "xarray_leaflet"}]

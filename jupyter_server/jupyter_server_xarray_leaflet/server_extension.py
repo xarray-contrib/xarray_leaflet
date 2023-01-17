@@ -30,6 +30,6 @@ def _jupyter_server_extension_paths():
     """
     return [
         {
-            "module": "xarray_leaflet"
+            "module": "jupyter_server_xarray_leaflet"
         }
     ]

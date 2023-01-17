@@ -1,0 +1,41 @@
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project]
+name = "xarray_leaflet"
+description = "An xarray extension for map plotting"
+keywords = [ "jupyter", "server", "xarray", "leaflet",]
+requires-python = ">=3.5"
+dependencies = [ 
+    "jupyter_server_xarray_leaflet >=0.2.1",
+    "rioxarray >=0.0.30",
+    "ipyleaflet >=0.13.1",
+    "pillow >=7",
+    "matplotlib >=3",
+    "affine >=2",
+    "mercantile >=1",
+    "ipyspin >=0.1.1",
+    "ipyurl >=0.1.2",
+]
+dynamic = [ "version" ]
+
+[[project.authors]]
+name = "David Brochart"
+email = "david.brochart@gmail.com"
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.license]
+text = "MIT License"
+
+[project.urls]
+Homepage = "https://github.com/xarray-contrib/xarray_leaflet"
+
+[tool.check-manifest]
+ignore = [ ".*",]
+
+[tool.hatch.version]
+path = "xarray_leaflet/__init__.py"

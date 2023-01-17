@@ -1,5 +1,5 @@
 from .handler import XarrayLeafletHandler
-from notebook.utils import url_path_join
+from jupyter_server.utils import url_path_join
 
 
 def _load_jupyter_server_extension(serverapp):

@@ -1,0 +1,37 @@
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project]
+name = "jupyter_server_xarray_leaflet"
+description = "A Jupyter Server extension for xarray-leaflet"
+keywords = [ "jupyter", "server", "xarray", "leaflet",]
+requires-python = ">=3.5"
+dependencies = [ 
+    "jupyter_server >=0.2.0",
+]
+dynamic = [ "version" ]
+
+[[project.authors]]
+name = "David Brochart"
+email = "david.brochart@gmail.com"
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.license]
+text = "MIT License"
+
+[project.urls]
+Homepage = "https://github.com/xarray-contrib/xarray_leaflet/jupyter_server"
+
+[tool.check-manifest]
+ignore = [ ".*",]
+
+[tool.hatch.version]
+path = "jupyter_server_xarray_leaflet/__init__.py"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"etc/jupyter/jupyter_server_config.d" = "etc/jupyter/jupyter_server_config.d"
+"etc/jupyter/jupyter_notebook_config.d" = "etc/jupyter/jupyter_notebook_config.d"

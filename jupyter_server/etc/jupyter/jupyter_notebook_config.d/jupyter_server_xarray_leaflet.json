@@ -1,7 +1,7 @@
 {
     "NotebookApp": {
         "nbserver_extensions": {
-            "xarray_leaflet": true
+            "jupyter_server_xarray_leaflet": true
         }
     }
 }

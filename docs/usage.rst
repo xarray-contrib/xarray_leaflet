@@ -67,7 +67,7 @@ chained, one function producing data for the next one.  These functions are:
   is the last opportunity to transform your data before it is saved to a PNG
   file and sent to the browser. That's often when you want to apply styling.
 
-Appart from this data flow, you can also pass a `matplotlib
+Apart from this data flow, you can also pass a `matplotlib
 <https://matplotlib.org/tutorials/colors/colormaps.html>`_ colormap function,
 as well as a `rasterio
 <https://rasterio.readthedocs.io/en/latest/api/rasterio.warp.html>`_ resampling

@@ -8,4 +8,4 @@ dependencies:
   - dask
   - rasterio=1.2.6
   - jupyterlab=3
-  - xarray_leaflet=0.1.15
+  - xarray_leaflet=0.2.3

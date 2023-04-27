@@ -392,7 +392,9 @@ class LeafletMap(HasTraits):
                         da_tile = np.stack(das, axis=2)
                         write_image(path, da_tile, self.persist)
                     else:
-                        da_tile = self.colormap(das[0])
+                        alpha = np.where(np.isnan(das[0]), 0, 1) 
+                        da_tile = self.colormap(das[0])                        
+                        da_tile[:,:,3:] = np.expand_dims(alpha, axis=2)
                         write_image(path, da_tile*255, self.persist)
 
         if self.dynamic:
